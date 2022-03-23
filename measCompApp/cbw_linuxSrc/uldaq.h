@@ -18,24 +18,24 @@ extern "C"
 typedef enum
 {
 	/** USB interface */
-	USB_IFC			= 1 << 0,
+	UL_USB_IFC			= 1 << 0,
 
 	/** Bluetooth interface */
-	BLUETOOTH_IFC	= 1 << 1,
+	UL_BLUETOOTH_IFC	= 1 << 1,
 
 	/** Ethernet interface */
-	ETHERNET_IFC	= 1 << 2,
+	UL_ETHERNET_IFC	= 1 << 2,
 
 	/** Any interface */
-	ANY_IFC = USB_IFC | BLUETOOTH_IFC | ETHERNET_IFC
+	UL_ANY_IFC = UL_USB_IFC | UL_BLUETOOTH_IFC | UL_ETHERNET_IFC
 
-}DaqDeviceInterface;
+}ulDaqDeviceInterface;
 
 /** \brief A structure that defines a particular DAQ device, usually obtained using ulGetDaqDeviceInventory().
  *
  * The struct contains fields with the product name, ID, and interface.
  */
-struct DaqDeviceDescriptor
+struct ulDaqDeviceDescriptor
 {
 	/** The generic (unqualified) product name of the device referenced by the DaqDeviceDescriptor */
 	char productName[64];
@@ -44,7 +44,7 @@ struct DaqDeviceDescriptor
 	unsigned int productId;
 
 	/** The enumeration indicating the type of interface in use by the device referenced by the DaqDeviceDescriptor. */
-	DaqDeviceInterface devInterface;
+	ulDaqDeviceInterface devInterface;
 
 	/** Similar to \p productname, but may contain additional information. */
 	char devString[64];
@@ -57,7 +57,7 @@ struct DaqDeviceDescriptor
 };
 
 /** \brief A structure that defines a particular DAQ device, usually obtained using ulGetDaqDeviceInventory(). */
-typedef struct 	DaqDeviceDescriptor DaqDeviceDescriptor;
+typedef struct 	ulDaqDeviceDescriptor ulDaqDeviceDescriptor;
 
 /**
  * The DAQ device
@@ -1099,9 +1099,9 @@ typedef enum
 
 #ifndef doxy_skip
 #define NOSCALEDATA 		1 << 0
-#define NOCALIBRATEDATA 	1 << 1
-#define SIMULTANEOUS		1 << 2
-#define NOCLEAR				1 << 3
+#define UL_NOCALIBRATEDATA 	1 << 1
+#define UL_SIMULTANEOUS		1 << 2
+#define UL_NOCLEAR				1 << 3
 #endif /*doxy_skip */
 
 /** Used with many analog input and output functions, as well as a return value for the \p infoValue argument
@@ -1158,7 +1158,7 @@ typedef enum
 	AINSCAN_FF_NOSCALEDATA 			= NOSCALEDATA, 		
 
 	/** Data is returned without calibration factors applied. */
-	AINSCAN_FF_NOCALIBRATEDATA 		= NOCALIBRATEDATA 	
+	AINSCAN_FF_NOCALIBRATEDATA 		= UL_NOCALIBRATEDATA 	
 }AInScanFlag;
 
 /** Use as the \p flags argument value for ulAIn() to set the properties of data returned. */
@@ -1171,7 +1171,7 @@ typedef enum
 	AIN_FF_NOSCALEDATA 			= NOSCALEDATA, 		
 
 	/** Data is returned without calibration factors applied. */
-	AIN_FF_NOCALIBRATEDATA 		= NOCALIBRATEDATA 	
+	AIN_FF_NOCALIBRATEDATA 		= UL_NOCALIBRATEDATA 	
 }AInFlag;
 
 /** Use as the \p flags argument value for ulAOutScan() to set the properties of data supplied to the function. */
@@ -1184,7 +1184,7 @@ typedef enum
 	AOUTSCAN_FF_NOSCALEDATA 			= NOSCALEDATA, 		
 
 	/** Data is output without calibration factors applied. */
-	AOUTSCAN_FF_NOCALIBRATEDATA 		= NOCALIBRATEDATA 	
+	AOUTSCAN_FF_NOCALIBRATEDATA 		= UL_NOCALIBRATEDATA 	
 }AOutScanFlag;
 
 /** Use as the \p flags argument value for ulTIn() to set the properties of data returned; reserved for future use. */
@@ -1217,7 +1217,7 @@ typedef enum
 	AOUT_FF_NOSCALEDATA 			= NOSCALEDATA, 		
 
 	/** Data is output without calibration factors applied. */
-	AOUT_FF_NOCALIBRATEDATA 		= NOCALIBRATEDATA 	
+	AOUT_FF_NOCALIBRATEDATA 		= UL_NOCALIBRATEDATA 	
 }AOutFlag;
 
 /** Use as the \p flags argument value for ulAOutArray() to set the properties of data supplied to the function. */
@@ -1230,10 +1230,10 @@ typedef enum
 	AOUTARRAY_FF_NOSCALEDATA 			= NOSCALEDATA,
 
 	/** Data is output without calibration factors applied. */
-	AOUTARRAY_FF_NOCALIBRATEDATA 		= NOCALIBRATEDATA ,
+	AOUTARRAY_FF_NOCALIBRATEDATA 		= UL_NOCALIBRATEDATA ,
 
 	/** All of the specified channels will be updated simultaneously. */
-	AOUTARRAY_FF_SIMULTANEOUS			= SIMULTANEOUS
+	AOUTARRAY_FF_SIMULTANEOUS			= UL_SIMULTANEOUS
 }AOutArrayFlag;
 
 /** Use with #AoConfigItem to set configuration options at runtime. */
@@ -1274,7 +1274,7 @@ typedef enum
 	CINSCAN_FF_CTR64_BIT 		= 1 << 2,
 
 	/** Does not clear the counter to 0 at the start of each scan. */
-	CINSCAN_FF_NOCLEAR			= NOCLEAR,
+	CINSCAN_FF_NOCLEAR			= UL_NOCLEAR,
 
 	/** Sets up the counter as a 48-bit counter channel */
 	CINSCAN_FF_CTR48_BIT 		= 1 << 4
@@ -1304,10 +1304,10 @@ typedef enum
 	DAQINSCAN_FF_NOSCALEDATA 		= NOSCALEDATA, 		
 
 	/** Data for analog channels is returned without calibration factors applied. */
-	DAQINSCAN_FF_NOCALIBRATEDATA 	= NOCALIBRATEDATA, 	
+	DAQINSCAN_FF_NOCALIBRATEDATA 	= UL_NOCALIBRATEDATA, 	
 
 	/** Counters are not cleared (set to 0) when a scan starts. */
-	DAQINSCAN_FF_NOCLEAR			= NOCLEAR			
+	DAQINSCAN_FF_NOCLEAR			= UL_NOCLEAR			
 }DaqInScanFlag;
 
 /** Use as the \p flags argument value for ulDaqOutScan() to set the properties of data sent. */
@@ -1320,7 +1320,7 @@ typedef enum
 	DAQOUTSCAN_FF_NOSCALEDATA 		= NOSCALEDATA, 		
 
 	/** Data for analog channels is output without calibration factors applied. */
-	DAQOUTSCAN_FF_NOCALIBRATEDATA 	= NOCALIBRATEDATA 	
+	DAQOUTSCAN_FF_NOCALIBRATEDATA 	= UL_NOCALIBRATEDATA 	
 }DaqOutScanFlag;
 
 /** Use as the value for the \p type argument for ulCConfigScan(). Use ulCtrGetInfo() with the ::CTR_INFO_MEASUREMENT_TYPES \p infoItem
@@ -2394,7 +2394,7 @@ typedef struct 	MemDescriptor MemDescriptor;
  * @return The UL error code.
  */
 
-UlError ulGetDaqDeviceInventory(DaqDeviceInterface interfaceTypes, DaqDeviceDescriptor daqDevDescriptors[], unsigned int* numDescriptors );
+UlError ulGetDaqDeviceInventory(ulDaqDeviceInterface interfaceTypes, ulDaqDeviceDescriptor daqDevDescriptors[], unsigned int* numDescriptors );
 
 /**
  * Get the descriptor of the remote network DAQ device.
@@ -2407,14 +2407,14 @@ UlError ulGetDaqDeviceInventory(DaqDeviceInterface interfaceTypes, DaqDeviceDesc
  * @return The UL error code.
  */
 
-UlError ulGetNetDaqDeviceDescriptor(const char* host, unsigned short port, const char* ifcName, DaqDeviceDescriptor* daqDevDescriptor, double timeout);
+UlError ulGetNetDaqDeviceDescriptor(const char* host, unsigned short port, const char* ifcName, ulDaqDeviceDescriptor* daqDevDescriptor, double timeout);
 
 /**
  * Create a device object within the Universal Library for the DAQ device specified by the descriptor.
  * @param daqDevDescriptor DaqDeviceDescriptor struct containing fields that describe the device
  * @return The device handle.
  */
-DaqDeviceHandle ulCreateDaqDevice(DaqDeviceDescriptor daqDevDescriptor);
+DaqDeviceHandle ulCreateDaqDevice(ulDaqDeviceDescriptor daqDevDescriptor);
 
 /**
  * Get descriptor information for a device. Before calling this function, you must first run #ulCreateDaqDevice()
@@ -2423,7 +2423,7 @@ DaqDeviceHandle ulCreateDaqDevice(DaqDeviceDescriptor daqDevDescriptor);
  * @param daqDeviceDescriptor a DaqDeviceDescriptor struct containing fields that describe the device
  * @return The UL error code.
  */
-UlError ulGetDaqDeviceDescriptor(DaqDeviceHandle daqDeviceHandle, DaqDeviceDescriptor* daqDeviceDescriptor);
+UlError ulGetDaqDeviceDescriptor(DaqDeviceHandle daqDeviceHandle, ulDaqDeviceDescriptor* daqDeviceDescriptor);
 
 /**
  * Establish a connection to a physical DAQ device.
@@ -3615,7 +3615,7 @@ UlError ulMemGetInfo(DaqDeviceHandle daqDeviceHandle, MemRegion memRegion, MemDe
  * @param daqDevDescriptor DaqDeviceDescriptor struct containing fields that describe the device
  * @return The device handle.
  */
-DaqDeviceHandle ulCreateDaqDevicePtr(DaqDeviceDescriptor* daqDevDescriptor);
+DaqDeviceHandle ulCreateDaqDevicePtr(ulDaqDeviceDescriptor* daqDevDescriptor);
 
 #endif /* doxy_skip */
 
