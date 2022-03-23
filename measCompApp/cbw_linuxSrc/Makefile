@@ -7,23 +7,13 @@ include $(TOP)/configure/CONFIG
 #=============================
 # Build the IOC support library
 
+INC += uldaq.h
 INC += cbw_linux.h
 
-ifeq ($(HAVE_HIDAPI), YES)
-  LIBRARY_IOC_Linux += cbw_linux
-endif
+LIBRARY_IOC_Linux += cbw_linux
 
 LIB_SRCS += cbw_linux.cpp
 LIB_SRCS += mcBoard.cpp
-LIB_SRCS += mcBoard_E-TC.cpp
-LIB_SRCS += mcBoard_E-TC32.cpp
-LIB_SRCS += mcBoard_E-1608.cpp
-LIB_SRCS += mcBoard_E-DIO24.cpp
-LIB_SRCS += mcBoard_USB-1608G.cpp
-LIB_SRCS += mcBoard_USB-3100.cpp
-LIB_SRCS += mcBoard_USB-CTR.cpp
-LIB_SRCS += mcBoard_USB-TEMP-AI.cpp
-LIB_SRCS += mcBoard_USB-TEMP.cpp
 
 #=============================
 
