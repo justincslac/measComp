@@ -13,9 +13,7 @@ DBD += measCompApp.dbd
 DBD += measCompSupport.dbd
 
 LIBRARY_IOC_WIN32 += measComp
-ifeq ($(HAVE_HIDAPI), YES)
-  LIBRARY_IOC_Linux+= measComp
-endif
+LIBRARY_IOC_Linux += measComp
 
 # Compile and add the code to the support library
 # Link locally-provided code into the support library,
@@ -34,9 +32,7 @@ measComp_LIBS += $(EPICS_BASE_IOC_LIBS)
 # Build the IOC application
 
 PROD_IOC_WIN32 += measCompApp
-ifeq ($(HAVE_HIDAPI), YES)
-  PROD_IOC_Linux += measCompApp
-endif
+PROD_IOC_Linux += measCompApp
 measCompApp_SRCS += measCompApp_registerRecordDeviceDriver.cpp
 
 # Build the main IOC entry point on workstation OSs.
@@ -44,8 +40,6 @@ measCompApp_SRCS += measCompAppMain.cpp
 
 # Link in the code from the support library
 measCompApp_LIBS += measComp
-measCompApp_LIBS_Linux += cbw_linux
-measCompApp_LIBS_Linux += measCompLinuxDrivers
 measCompApp_LIBS += scaler
 measCompApp_LIBS += busy
 measCompApp_LIBS += calc
@@ -61,7 +55,8 @@ else ifeq (windows-x64, $(findstring windows-x64, $(T_A)))
   measComp_LIBS += cbw64
   measCompApp_LIBS += cbw64
 endif
-measCompApp_SYS_LIBS_Linux += hidapi-libusb usb-1.0
+measCompApp_LIBS_Linux += cbw_linux
+measCompApp_SYS_LIBS_Linux += uldaq usb-1.0
 # Finally link to the EPICS Base libraries
 measCompApp_LIBS += $(EPICS_BASE_IOC_LIBS)
 
@@ -82,9 +77,7 @@ else ifeq (windows-x64, $(findstring windows-x64, $(T_A)))
 endif
 
 PROD_IOC_WIN32 += test_measCompDiscover
-ifeq ($(HAVE_HIDAPI), YES)
-  PROD_IOC_Linux += test_measCompDiscover
-endif
+PROD_IOC_Linux += test_measCompDiscover
 test_measCompDiscover_SRCS += test_measCompDiscover.cpp
 test_measCompDiscover_LIBS += measComp
 ifeq (win32-x86, $(findstring win32-x86, $(T_A)))
@@ -93,15 +86,12 @@ else ifeq (windows-x64, $(findstring windows-x64, $(T_A)))
   test_measCompDiscover_LIBS += cbw64
 endif
 test_measCompDiscover_LIBS_Linux += cbw_linux
-test_measCompDiscover_LIBS_Linux += measCompLinuxDrivers
-test_measCompDiscover_SYS_LIBS_Linux += hidapi-libusb usb-1.0
+test_measCompDiscover_SYS_LIBS_Linux += uldaq usb-1.0
 # Finally link to the EPICS Base libraries
 test_measCompDiscover_LIBS_Linux += $(EPICS_BASE_IOC_LIBS)
 
 PROD_IOC_WIN32 += testPadZero
-ifeq ($(HAVE_HIDAPI), YES)
-  PROD_IOC_Linux += testPadZero
-endif
+PROD_IOC_Linux += testPadZero
 testPadZero_LIBS += measComp
 testPadZero_SRCS += testPadZero.cpp
 ifeq (win32-x86, $(findstring win32-x86, $(T_A)))
@@ -110,8 +100,7 @@ else ifeq (windows-x64, $(findstring windows-x64, $(T_A)))
   testPadZero_LIBS += cbw64
 endif
 testPadZero_LIBS_Linux += cbw_linux asyn
-testPadZero_LIBS_Linux += measCompLinuxDrivers
-testPadZero_SYS_LIBS_Linux += hidapi-libusb usb-1.0
+testPadZero_SYS_LIBS_Linux += uldaq usb-1.0
 # Finally link to the EPICS Base libraries
 testPadZero_LIBS_Linux += $(EPICS_BASE_IOC_LIBS)
 #=============================
