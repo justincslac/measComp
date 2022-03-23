@@ -22,9 +22,8 @@
 
 #ifdef linux
   #include "cbw_linux.h"
-#else
-  #include "cbw.h"
 #endif
+#include "cbw.h"
 
 #include <epicsExport.h>
 #include <measCompDiscover.h>
@@ -240,10 +239,6 @@ USBCTR::USBCTR(const char *portName, const char *uniqueID, int maxTimePoints, do
     printf("Error creating device with measCompCreateDevice\n");
     return;
   }
-
-#ifdef linux
-  cbSetAsynUser(boardNum_, pasynUserSelf);
-#endif
 
   // Pulse generator parameters
   createParam(pulseGenRunString,               asynParamInt32, &pulseGenRun_);

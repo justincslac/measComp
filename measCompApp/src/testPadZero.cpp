@@ -2,9 +2,8 @@
 #include <inttypes.h>
 #ifdef linux
   #include "cbw_linux.h"
-#else
-  #include "cbw.h"
 #endif
+#include "cbw.h"
 
 #include <measCompDiscover.h>
 
@@ -38,12 +37,6 @@ int main(int argc, char *argv[])
 
   // Use the serial number for the USB-CTR here.
   boardNum = measCompCreateDevice("123456");
-
-#ifdef linux
-  asynUser *pasynUser = pasynManager->createAsynUser(0, 0);
-  pasynTrace->setTraceMask(0, 255);
-  cbSetAsynUser(boardNum, pasynUser);
-#endif
 
   inputMemHandle  = cbWinBufAlloc32(1000);
   for (i=0; i<CHAN_COUNT; i++) gainArray[i] = 0;

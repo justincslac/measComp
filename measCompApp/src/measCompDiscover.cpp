@@ -2,9 +2,8 @@
 #include <string>
 #ifdef linux
   #include "cbw_linux.h"
-#else
-  #include "cbw.h"
 #endif
+#include "cbw.h"
 
 #include <epicsExport.h>
 #include <measCompDiscover.h>
