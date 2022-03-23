@@ -2,161 +2,28 @@
 #include <vector>
 #include <string>
 
-#include "cbw_linux.h"
-#include "pmd.h"
 #include "mcBoard.h"
-#include "mcBoard_E-TC.h"
-#include "mcBoard_E-TC32.h"
-#include "mcBoard_E-1608.h"
-#include "mcBoard_E-DIO24.h"
-#include "mcBoard_USB-CTR.h"
-#include "mcBoard_USB-TEMP-AI.h"
-#include "mcBoard_USB-TEMP.h"
-#include "mcBoard_USB-1608G.h"
-#include "mcBoard_USB-3100.h"
-
 
 #define MAX_DEVICES 100
 
 std::vector<mcBoard*> boardList(MAX_DEVICES);
 
-
+extern "C" {
 // System functions
-
-// Copy information from an EthernetDeviceInfo to a DaqDevuceDescriptor
-static void copyEDIToDDD(EthernetDeviceInfo *pEDI, DaqDeviceDescriptor *pDDD)
-{
-  pDDD->ProductID = pEDI->ProductID;
-  strcpy(pDDD->DevString, pEDI->NetBIOS_Name);
-  std::string productName = pDDD->DevString;
-  productName = productName.substr(0, productName.rfind("-"));
-  strcpy(pDDD->ProductName, productName.c_str());
-  pDDD->InterfaceType = ETHERNET_IFC;
-  sprintf(pDDD->UniqueID, "%.2X:%.2X:%.2X:%.2X:%.2X:%.2X",
-          pEDI->MAC[0], pEDI->MAC[1], pEDI->MAC[2],
-          pEDI->MAC[3], pEDI->MAC[4], pEDI->MAC[5]);
-  pDDD->NUID = 0;
-  for (int j=0; j<6; j++) {
-    pDDD->NUID += (ULONGLONG)(pEDI->MAC[j]) << 8*(5-j);
-  }
-  int addr=pEDI->Address.sin_addr.s_addr;
-  sprintf(pDDD->Reserved, "%d.%d.%d.%d", addr&0xFF, addr>>8&0xFF, addr>>16&0xFF, addr>>24&0xFF);
-}
 
 int cbGetDaqDeviceInventory(DaqDeviceInterface InterfaceType, DaqDeviceDescriptor* Inventory, INT* NumberOfDevices)
 {
-  *NumberOfDevices = 0;
-
-  // First search for USB devices if requested
-  if ((InterfaceType == ANY_IFC) || (InterfaceType == USB_IFC)) {
-    int vendorId = MCC_VID;
-    struct libusb_device_handle *udev = NULL;
-    struct libusb_device_descriptor desc;
-    struct libusb_device **list;
-    struct libusb_device *found = NULL;
-    struct libusb_device *device;
-    char serial[9];
-    ssize_t cnt = 0;
-    ssize_t i = 0;
-    int err = 0;
-
-    err = libusb_init(NULL);
-    if (err < 0) {
-      perror("libusb_init returned error");
-      goto usb_done;
-    }
-
-    // discover devices
-    cnt = libusb_get_device_list(NULL, &list);
-
-    for (i = 0; i < cnt; i++) {
-      device = list[i];
-      err = libusb_get_device_descriptor(device, &desc);
-      if (err < 0) {
-        perror("usb_device_find_USB_MCC: Can not get USB device descriptor");
-        goto usb_done;
-      }
-      if (desc.idVendor == vendorId) {
-        found = device;
-        err = libusb_open(found, &udev);
-        if (err < 0) {
-             perror("usb_device_find_USB_MCC: libusb_open failed.");
-             udev = NULL;
-             continue;
-        }
-        err = libusb_kernel_driver_active(udev, 0);
-        if (err == 1) {
-          /*
-            device active by another driver. (like HID).  This can be dangerous,
-            as we don't know if the kenel has claimed the interface or another
-            process.  No easy way to tell at this moment, but HID devices won't
-            work otherwise.
-          */
-          #if defined(LIBUSB_API_VERSION) && (LIBUSB_API_VERSION >= 0x01000103)
-            libusb_set_auto_detach_kernel_driver(udev, 1);
-          #else
-            libusb_detach_kernel_driver(udev, 0);
-          #endif
-        }
-        err = libusb_claim_interface(udev, 0);
-        if (err < 0) {
-          perror("error claiming interface 0");
-          libusb_close(udev);
-          udev = NULL;
-          continue;
-        }
-        err = libusb_get_string_descriptor_ascii(udev, desc.iSerialNumber, (unsigned char *) serial, sizeof(serial));
-        if (err < 0) {
-          perror("usb_device_find_USB_MCC: Error reading serial number for device.");
-          libusb_release_interface(udev, 0);
-          libusb_close(udev);
-          udev = NULL;
-          continue;
-        }
-        // We found a device and got the serial number. Add it to the inventory.
-        DaqDeviceDescriptor* pDevice = Inventory + (*NumberOfDevices)++;
-        pDevice->ProductID = desc.idProduct;
-        pDevice->InterfaceType = USB_IFC;
-        err = libusb_get_string_descriptor_ascii(udev, desc.iSerialNumber,
-                                                 (unsigned char*)pDevice->UniqueID, sizeof(pDevice->UniqueID));
-        err = libusb_get_string_descriptor_ascii(udev, desc.iProduct,
-                                                 (unsigned char*)pDevice->ProductName, sizeof(pDevice->ProductName));
-        strcpy(pDevice->DevString, pDevice->ProductName);
-        pDevice->NUID = strtol(pDevice->UniqueID, NULL, 16);
-        // The serial number reported above can have leading zeros which don't appear on the label on the
-        // device, and don't appear in the serial number reported on Windows.  Remove them by printing the
-        // NUID back into the UniqueID.
-        sprintf(pDevice->UniqueID, "%llX", pDevice->NUID);
-        libusb_release_interface(udev, 0);
-        libusb_close(udev);
-        udev = NULL;
-      }
-    }
-    usb_done:
-    libusb_free_device_list(list,1);
-    libusb_exit(NULL);
+  ulDaqDeviceDescriptor* ulInventory = (ulDaqDeviceDescriptor*) calloc(*NumberOfDevices, sizeof(ulDaqDeviceDescriptor));
+  UlError error = ulGetDaqDeviceInventory((ulDaqDeviceInterface)InterfaceType, ulInventory, (unsigned int*)NumberOfDevices);
+  for (int i=0; i<*NumberOfDevices; i++) {
+    strcpy(Inventory[i].ProductName, ulInventory[i].productName);
+    Inventory[i].ProductID = ulInventory[i].productId;
+    Inventory[i].InterfaceType = (DaqDeviceInterface)ulInventory[i].devInterface;
+    strcpy(Inventory[i].DevString, ulInventory[i].devString);
+    strcpy(Inventory[i].UniqueID, ulInventory[i].uniqueId);
+    memcpy(Inventory[i].Reserved, ulInventory[i].reserved, sizeof(Inventory[i].Reserved));
   }
-
-  // Now search for Ethernet devices
-  if ((InterfaceType == ANY_IFC) || (InterfaceType == ETHERNET_IFC)) {
-    int i;
-    EthernetDeviceInfo *deviceInfo[MAX_DEVICES];
-
-    for (i=0; i<MAX_DEVICES; i++) {
-      deviceInfo[i] = (EthernetDeviceInfo *)malloc(sizeof(EthernetDeviceInfo));
-    }
-
-    int numFound = discoverDevices(deviceInfo, 0, MAX_DEVICES);
-    if (numFound < 0) {
-       perror("Error calling discoverDevices");
-       return -1;
-    }
-    for (i=0; i<numFound; i++) {
-      DaqDeviceDescriptor* pDevice = Inventory + (*NumberOfDevices)++;
-      copyEDIToDDD(deviceInfo[i], pDevice);
-    }
-  }
-  return 0;
+  return error;
 }
 
 int cbIgnoreInstaCal()
@@ -164,56 +31,32 @@ int cbIgnoreInstaCal()
   return 0;
 }
 
-int cbCreateDaqDevice(int BoardNum, DaqDeviceDescriptor deviceDescriptor)
-{
-    mcBoard *pBoard;
-    if (strcmp(deviceDescriptor.ProductName, "E-TC") == 0) {
-        pBoard = (mcBoard *)new mcE_TC(deviceDescriptor.Reserved);
-    }
-    else if ((strcmp(deviceDescriptor.ProductName, "E-TC32") == 0) ||
-             (strcmp(deviceDescriptor.ProductName, "TC-32") == 0)) {
-       pBoard = (mcBoard *)new mcE_TC32(deviceDescriptor.Reserved);
-    }
-    else if (strcmp(deviceDescriptor.ProductName, "E-1608") == 0) {
-        pBoard = (mcBoard *)new mcE_1608(deviceDescriptor.Reserved);
-    }
-    else if (strcmp(deviceDescriptor.ProductName, "E-DIO24") == 0) {
-        pBoard = (mcBoard *)new mcE_DIO24(deviceDescriptor.Reserved);
-    }
-    else if (strncmp(deviceDescriptor.ProductName, "USB-CTR", 7) == 0) {
-        pBoard = (mcBoard *)new mcUSB_CTR(deviceDescriptor.UniqueID);
-    }
-    else if (strcmp(deviceDescriptor.ProductName, "USB-TEMP") == 0) {
-        pBoard = (mcBoard *)new mcUSB_TEMP(deviceDescriptor.UniqueID);
-    }
-    else if (strcmp(deviceDescriptor.ProductName, "USB-TEMP-AI") == 0) {
-        pBoard = (mcBoard *)new mcUSB_TEMP_AI(deviceDescriptor.UniqueID);
-    }
-    else if (strstr(deviceDescriptor.ProductName, "USB-1608") != 0) {
-        pBoard = (mcBoard *)new mcUSB1608G(deviceDescriptor.UniqueID);
-    }
-    else if (strstr(deviceDescriptor.ProductName, "USB-31") != 0) {
-        pBoard = (mcBoard *)new mcUSB_3100(deviceDescriptor.UniqueID, deviceDescriptor.ProductID, deviceDescriptor.ProductName);
-    }
-    else {
-        printf("Unknown board type %s\n", deviceDescriptor.ProductName);
-        return BADBOARD;
-    }
-    boardList[BoardNum] = pBoard;
-    return NOERRORS;
-}
-
 int cbGetNetDeviceDescriptor(char* Host, int Port, DaqDeviceDescriptor* DeviceDescriptor, int Timeout)
 {
-    EthernetDeviceInfo deviceInfo;
+    ulDaqDeviceDescriptor ulDeviceDescriptor;
+    UlError error = ulGetNetDaqDeviceDescriptor((const char*)Host, (unsigned short)Port, NULL, &ulDeviceDescriptor, Timeout);
+    strcpy(DeviceDescriptor->ProductName, ulDeviceDescriptor.productName);
+    DeviceDescriptor->ProductID = ulDeviceDescriptor.productId;
+    DeviceDescriptor->InterfaceType = (DaqDeviceInterface)ulDeviceDescriptor.devInterface;
+    strcpy(DeviceDescriptor->DevString, ulDeviceDescriptor.devString);
+    strcpy(DeviceDescriptor->UniqueID, ulDeviceDescriptor.uniqueId);
+    memcpy(DeviceDescriptor->Reserved, ulDeviceDescriptor.reserved, sizeof(DeviceDescriptor->Reserved));
+    return error;
+}
 
-    int numFound = discoverRemoteDevice(Host, &deviceInfo, 0);
-    if (numFound != 1) {
-       printf("Could not find device %s\n", Host);
-       return -1;
-    }
-    copyEDIToDDD(&deviceInfo, DeviceDescriptor);
-    return 0;
+int cbCreateDaqDevice(int BoardNum, DaqDeviceDescriptor DeviceDescriptor)
+{
+    ulDaqDeviceDescriptor ulDeviceDescriptor;
+    strcpy(ulDeviceDescriptor.productName, DeviceDescriptor.ProductName);
+    ulDeviceDescriptor.productId = DeviceDescriptor.ProductID;
+    ulDeviceDescriptor.devInterface = (ulDaqDeviceInterface)DeviceDescriptor.InterfaceType;
+    strcpy(ulDeviceDescriptor.devString, DeviceDescriptor.DevString);
+    strcpy(ulDeviceDescriptor.uniqueId, DeviceDescriptor.UniqueID);
+    memcpy(ulDeviceDescriptor.reserved, DeviceDescriptor.Reserved, sizeof(DeviceDescriptor.Reserved));
+    DaqDeviceHandle devHandle = ulCreateDaqDevice(ulDeviceDescriptor);
+    mcBoard *pBoard = new mcBoard(ulDeviceDescriptor, devHandle);
+    boardList[BoardNum] = pBoard;
+    return NOERRORS;
 }
 
 int cbGetConfig(int InfoType, int BoardNum, int DevNum,
@@ -243,13 +86,6 @@ int cbGetErrMsg(int ErrCode, char *ErrMsg)
     static const char *functionName = "cbGetErrMsg";
     printf("Function %s not supported\n", functionName);
     return NOERRORS;
-}
-
-int cbSetAsynUser(int BoardNum, asynUser *pasynUser)
-{
-    if (BoardNum >= (int)boardList.size()) return BADBOARD;
-    mcBoard *pBoard = boardList[BoardNum];
-    return pBoard->cbSetAsynUser(pasynUser);
 }
 
 HGLOBAL cbWinBufAlloc(long NumPoints)
@@ -479,3 +315,5 @@ int cbDaqSetTrigger(int BoardNum, int TrigSource, int TrigSense, int TrigChan, i
     return pBoard->cbDaqSetTrigger(TrigSource, TrigSense, TrigChan, ChanType,
                                                  Gain, Level, Variance, TrigEvent);
 }
+
+} /* extern "C" */

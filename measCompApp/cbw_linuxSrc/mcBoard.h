@@ -7,12 +7,11 @@
 
 class mcBoard {
 public:
-    mcBoard(const char *address);
+    mcBoard(ulDaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDeviceHandle);
     // System functions
     virtual int cbGetBoardName(char *BoardName);
     virtual int cbGetConfig(int InfoType, int DevNum, int ConfigItem, int *ConfigVal);
     virtual int cbSetConfig(int InfoType, int DevNum, int ConfigItem, int ConfigVal);
-    virtual int cbSetAsynUser(asynUser *paynUser);
     virtual int cbGetIOStatus(short *Status, long *CurCount, long *CurIndex,int FunctionType);
     virtual int cbStopIOBackground(int FunctionType);
 
@@ -67,9 +66,10 @@ public:
                                 int Gain, float Level, float Variance, int TrigEvent);
 
 protected:
-    char address_[MAX_ADDRESS_LEN];
+    ulDaqDeviceDescriptor daqDeviceDescriptor_;
+    DaqDeviceHandle daqDeviceHandle_;
     char boardName_[BOARDNAMELEN];
-    asynUser *pasynUser_;
+    int aiInputMode_;
     int biBoardType_;
     int biNumADCChans_;
     int biADCRes_;

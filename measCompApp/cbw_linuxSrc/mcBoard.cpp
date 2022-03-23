@@ -1,14 +1,13 @@
 #include <stdio.h>
+#include <string.h>
 
-#include "cbw_linux.h"
 #include "mcBoard.h"
 
 
-mcBoard::mcBoard(const char *address) {
-    strncpy(address_, address, sizeof(address_)-1);
-
-    strcpy(boardName_, "");
-    pasynUser_      = 0;
+mcBoard::mcBoard(ulDaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDeviceHandle) {
+    daqDeviceDescriptor_ = daqDeviceDescriptor;
+    daqDeviceHandle_ = daqDeviceHandle;
+    strcpy(boardName_, daqDeviceDescriptor.productName);
     biBoardType_    = 0;
     biNumADCChans_  = 0;
     biADCRes_       = 0;
@@ -23,6 +22,7 @@ mcBoard::mcBoard(const char *address) {
 }
 
 // System functions
+
 int mcBoard::cbGetConfig(int InfoType, int DevNum, int ConfigItem, int *ConfigVal) {
     switch (InfoType) {
     case BOARDINFO:
@@ -77,11 +77,6 @@ int mcBoard::cbSetConfig(int InfoType, int DevNum, int ConfigItem, int ConfigVal
     return NOERRORS;
 }
 
-int mcBoard::cbSetAsynUser(asynUser *pasynUser)
-{
-    pasynUser_ = pasynUser;
-    return NOERRORS;
-}
 
 
 int mcBoard::cbGetBoardName(char *BoardName)
@@ -90,20 +85,36 @@ int mcBoard::cbGetBoardName(char *BoardName)
     return NOERRORS;
 }
 
-int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex,int FunctionType)
+int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex, int FunctionType)
 {
-    // Most unimplemented functions print an error message.  This one does not because it may be called
-    // for devices even if they don't support it so the base class sets everything to 0.
-    *Status = 0;
-    *CurCount = 0;
-    *CurIndex = 0;
-    return NOERRORS;
+    ScanStatus scanStatus;
+    TransferStatus xferStatus;
+    UlError error = ERR_NO_ERROR;
+    switch (FunctionType) { 
+      case AIFUNCTION:
+        error = ulDaqInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        break;
+      case AOFUNCTION:
+        error = ulDaqOutScanStop(daqDeviceHandle_);
+        break;
+    }
+    *Status = scanStatus;
+    *CurCount = xferStatus.currentTotalCount;
+    return error;
 }
 
 int mcBoard::cbStopIOBackground(int FunctionType)
 {
-    printf("cbStopIOBackground not supported\n");
-    return NOERRORS;
+    UlError error = ERR_NO_ERROR;
+    switch (FunctionType) { 
+      case AIFUNCTION:
+        error = ulDaqInScanStop(daqDeviceHandle_);
+        break;
+      case AOFUNCTION:
+        error = ulDaqOutScanStop(daqDeviceHandle_);
+        break;
+    }
+    return error;
 }
 
 // Analog I/O functions
