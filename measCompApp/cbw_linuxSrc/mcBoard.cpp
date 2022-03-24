@@ -4,9 +4,13 @@
 #include "mcBoard.h"
 
 
-mcBoard::mcBoard(uldaq::DaqDeviceDescriptor daqDeviceDescriptor, uldaq::DaqDeviceHandle daqDeviceHandle) {
-    daqDeviceDescriptor_ = daqDeviceDescriptor;
-    daqDeviceHandle_ = daqDeviceHandle;
+mcBoard::mcBoard(uldaq::DaqDeviceDescriptor daqDeviceDescriptor, uldaq::DaqDeviceHandle daqDeviceHandle)
+ :  daqDeviceDescriptor_(daqDeviceDescriptor),
+    daqDeviceHandle_(daqDeviceHandle),
+    aiFlags_(uldaq::AIN_FF_NOSCALEDATA),
+    aoFlags_(uldaq::AOUT_FF_NOSCALEDATA)
+{
+    
     strcpy(boardName_, daqDeviceDescriptor.productName);
     biBoardType_    = 0;
     biNumADCChans_  = 0;
@@ -19,6 +23,15 @@ mcBoard::mcBoard(uldaq::DaqDeviceDescriptor daqDeviceDescriptor, uldaq::DaqDevic
     diInMask_       = 0;
     diOutMask_      = 0;
     diNumBits_      = 0;
+}
+
+int mcBoard::GainToRange(int Gain, uldaq::Range *range)
+{
+    // Converts cbw Gain to uldaq Range
+    switch (Gain) {
+      case BIP60VOLTS: *range = uldaq::BIP60VOLTS; break;
+    }
+    return NOERRORS;
 }
 
 // System functions
@@ -92,14 +105,15 @@ int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex, int Fu
     uldaq::UlError error = uldaq::ERR_NO_ERROR;
     switch (FunctionType) { 
       case AIFUNCTION:
-        error = ulDaqInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        error = uldaq::ulDaqInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
         break;
       case AOFUNCTION:
-        error = uldaq::ulDaqOutScanStop(daqDeviceHandle_);
+        error = uldaq::ulDaqOutScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
         break;
     }
     *Status = scanStatus;
     *CurCount = xferStatus.currentTotalCount;
+    *CurIndex = xferStatus.currentIndex;
     return error;
 }
 
@@ -121,15 +135,17 @@ int mcBoard::cbStopIOBackground(int FunctionType)
 int mcBoard::cbAIn(int Chan, int Gain, USHORT *DataValue)
 {
     double data;
-    uldaq::UlError error = ulAIn(daqDeviceHandle_, Chan, aiInputMode_, aiRange_, aiFlag_, &data);
+    uldaq::UlError error = uldaq::ulAIn(daqDeviceHandle_, Chan, aiInputMode_, aiRange_, aiFlags_, &data);
     *DataValue = (USHORT)data;
     return error;
 }
 
 int mcBoard::cbAIn32(int Chan, int Gain, ULONG *DataValue, int Options)
 {
-    printf("Function cbAIn32 not supported\n");
-    return NOERRORS;
+    double data;
+    uldaq::UlError error = uldaq::ulAIn(daqDeviceHandle_, Chan, aiInputMode_, aiRange_, aiFlags_, &data);
+    *DataValue = (ULONG)data;
+    return error;
 }
 
 int mcBoard::cbAInScan(int LowChan, int HighChan, long Count, long *Rate,
@@ -153,8 +169,8 @@ int mcBoard::cbALoadQueue(short *ChanArray, short *GainArray, int NumChans)
 
 int mcBoard::cbAOut(int Chan, int Gain, USHORT DataValue)
 {
-    printf("Function cbAOut not supported\n");
-    return NOERRORS;
+    uldaq::UlError error = uldaq::ulAOut(daqDeviceHandle_, Chan, aoRange_, aoFlags_, (double)DataValue);
+    return error;
 }
 
 int mcBoard::cbAOutScan(int LowChan, int HighChan,
