@@ -8,6 +8,8 @@
 class mcBoard {
 public:
     mcBoard(uldaq::DaqDeviceDescriptor daqDeviceDescriptor, uldaq::DaqDeviceHandle daqDeviceHandle);
+    virtual int GainToRange(int Gain, uldaq::Range *range);
+
     // System functions
     virtual int cbGetBoardName(char *BoardName);
     virtual int cbGetConfig(int InfoType, int DevNum, int ConfigItem, int *ConfigVal);
@@ -71,7 +73,9 @@ protected:
     char boardName_[BOARDNAMELEN];
     uldaq::AiInputMode aiInputMode_;
     uldaq::Range aiRange_;
-    uldaq::AInFlag aiFlag_;
+    uldaq::AInFlag aiFlags_;
+    uldaq::Range aoRange_;
+    uldaq::AOutFlag aoFlags_;
     int biBoardType_;
     int biNumADCChans_;
     int biADCRes_;
