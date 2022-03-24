@@ -4,7 +4,7 @@
 #include "mcBoard.h"
 
 
-mcBoard::mcBoard(ulDaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDeviceHandle) {
+mcBoard::mcBoard(uldaq::DaqDeviceDescriptor daqDeviceDescriptor, uldaq::DaqDeviceHandle daqDeviceHandle) {
     daqDeviceDescriptor_ = daqDeviceDescriptor;
     daqDeviceHandle_ = daqDeviceHandle;
     strcpy(boardName_, daqDeviceDescriptor.productName);
@@ -87,15 +87,15 @@ int mcBoard::cbGetBoardName(char *BoardName)
 
 int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex, int FunctionType)
 {
-    ScanStatus scanStatus;
-    TransferStatus xferStatus;
-    UlError error = ERR_NO_ERROR;
+    uldaq::ScanStatus scanStatus;
+    uldaq::TransferStatus xferStatus;
+    uldaq::UlError error = uldaq::ERR_NO_ERROR;
     switch (FunctionType) { 
       case AIFUNCTION:
         error = ulDaqInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
         break;
       case AOFUNCTION:
-        error = ulDaqOutScanStop(daqDeviceHandle_);
+        error = uldaq::ulDaqOutScanStop(daqDeviceHandle_);
         break;
     }
     *Status = scanStatus;
@@ -105,13 +105,13 @@ int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex, int Fu
 
 int mcBoard::cbStopIOBackground(int FunctionType)
 {
-    UlError error = ERR_NO_ERROR;
+    uldaq::UlError error = uldaq::ERR_NO_ERROR;
     switch (FunctionType) { 
       case AIFUNCTION:
-        error = ulDaqInScanStop(daqDeviceHandle_);
+        error = uldaq::ulDaqInScanStop(daqDeviceHandle_);
         break;
       case AOFUNCTION:
-        error = ulDaqOutScanStop(daqDeviceHandle_);
+        error = uldaq::ulDaqOutScanStop(daqDeviceHandle_);
         break;
     }
     return error;
@@ -120,8 +120,10 @@ int mcBoard::cbStopIOBackground(int FunctionType)
 // Analog I/O functions
 int mcBoard::cbAIn(int Chan, int Gain, USHORT *DataValue)
 {
-    printf("Function cbAIn not supported\n");
-    return NOERRORS;
+    double data;
+    uldaq::UlError error = ulAIn(daqDeviceHandle_, Chan, aiInputMode_, aiRange_, aiFlag_, &data);
+    *DataValue = (USHORT)data;
+    return error;
 }
 
 int mcBoard::cbAIn32(int Chan, int Gain, ULONG *DataValue, int Options)
