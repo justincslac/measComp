@@ -7,7 +7,7 @@
 
 class mcBoard {
 public:
-    mcBoard(ulDaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDeviceHandle);
+    mcBoard(uldaq::DaqDeviceDescriptor daqDeviceDescriptor, uldaq::DaqDeviceHandle daqDeviceHandle);
     // System functions
     virtual int cbGetBoardName(char *BoardName);
     virtual int cbGetConfig(int InfoType, int DevNum, int ConfigItem, int *ConfigVal);
@@ -66,10 +66,12 @@ public:
                                 int Gain, float Level, float Variance, int TrigEvent);
 
 protected:
-    ulDaqDeviceDescriptor daqDeviceDescriptor_;
-    DaqDeviceHandle daqDeviceHandle_;
+    uldaq::DaqDeviceDescriptor daqDeviceDescriptor_;
+    uldaq::DaqDeviceHandle daqDeviceHandle_;
     char boardName_[BOARDNAMELEN];
-    int aiInputMode_;
+    uldaq::AiInputMode aiInputMode_;
+    uldaq::Range aiRange_;
+    uldaq::AInFlag aiFlag_;
     int biBoardType_;
     int biNumADCChans_;
     int biADCRes_;
