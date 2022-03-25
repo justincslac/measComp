@@ -15,7 +15,6 @@ typedef unsigned int ULONG;
 typedef void * HGLOBAL;
 #define __stdcall
 
-#include <uldaq.h>
 #include "cbw.h"
 
 #endif
