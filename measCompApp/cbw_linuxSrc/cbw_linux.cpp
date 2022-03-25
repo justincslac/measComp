@@ -11,19 +11,25 @@ std::vector<mcBoard*> boardList(MAX_DEVICES);
 extern "C" {
 // System functions
 
-int cbGetDaqDeviceInventory(DaqDeviceInterface InterfaceType, DaqDeviceDescriptor* Inventory, INT* NumberOfDevices)
+int cbGetDaqDeviceInventory(CBW_DaqDeviceInterface InterfaceType, CBW_DaqDeviceDescriptor* Inventory, INT* NumberOfDevices)
 {
-  uldaq::DaqDeviceDescriptor* ulInventory = (uldaq::DaqDeviceDescriptor*) calloc(*NumberOfDevices, sizeof(uldaq::DaqDeviceDescriptor));
-  uldaq::UlError error = uldaq::ulGetDaqDeviceInventory((uldaq::DaqDeviceInterface)InterfaceType, ulInventory, (unsigned int*)NumberOfDevices);
-  for (int i=0; i<*NumberOfDevices; i++) {
-    strcpy(Inventory[i].ProductName, ulInventory[i].productName);
-    Inventory[i].ProductID = ulInventory[i].productId;
-    Inventory[i].InterfaceType = (DaqDeviceInterface)ulInventory[i].devInterface;
-    strcpy(Inventory[i].DevString, ulInventory[i].devString);
-    strcpy(Inventory[i].UniqueID, ulInventory[i].uniqueId);
-    memcpy(Inventory[i].Reserved, ulInventory[i].reserved, sizeof(Inventory[i].Reserved));
-  }
-  return error;
+    DaqDeviceDescriptor* ulInventory = (DaqDeviceDescriptor*) calloc(*NumberOfDevices, sizeof(DaqDeviceDescriptor));
+    UlError error = ulGetDaqDeviceInventory((DaqDeviceInterface)InterfaceType, ulInventory, (unsigned int*)NumberOfDevices);
+    for (int i=0; i<*NumberOfDevices; i++) {
+        strcpy(Inventory[i].ProductName, ulInventory[i].productName);
+        Inventory[i].ProductID = ulInventory[i].productId;
+        Inventory[i].InterfaceType = (CBW_DaqDeviceInterface)ulInventory[i].devInterface;
+        strcpy(Inventory[i].DevString, ulInventory[i].devString);
+        strcpy(Inventory[i].UniqueID, ulInventory[i].uniqueId);
+        if (ulInventory[i].devInterface == ETHERNET_IFC) {
+            DaqDeviceHandle devHandle = ulCreateDaqDevice(ulInventory[i]);
+            unsigned int maxLen = sizeof(ulInventory[i].reserved);
+            error = ulDevGetConfigStr(devHandle, DEV_CFG_IP_ADDR_STR, 0, ulInventory[i].reserved, &maxLen);
+            error = ulReleaseDaqDevice(devHandle);
+        }
+        memcpy(Inventory[i].Reserved, ulInventory[i].reserved, sizeof(Inventory[i].Reserved));
+    }
+    return error;
 }
 
 int cbIgnoreInstaCal()
@@ -31,31 +37,30 @@ int cbIgnoreInstaCal()
   return 0;
 }
 
-int cbGetNetDeviceDescriptor(char* Host, int Port, DaqDeviceDescriptor* DeviceDescriptor, int Timeout)
+int cbGetNetDeviceDescriptor(char* Host, int Port, CBW_DaqDeviceDescriptor* DeviceDescriptor, int Timeout)
 {
-    uldaq::DaqDeviceDescriptor ulDeviceDescriptor;
-    uldaq::UlError error = ulGetNetDaqDeviceDescriptor((const char*)Host, (unsigned short)Port, NULL, &ulDeviceDescriptor, Timeout);
+    DaqDeviceDescriptor ulDeviceDescriptor;
+    UlError error = ulGetNetDaqDeviceDescriptor((const char*)Host, (unsigned short)Port, NULL, &ulDeviceDescriptor, Timeout);
     strcpy(DeviceDescriptor->ProductName, ulDeviceDescriptor.productName);
     DeviceDescriptor->ProductID = ulDeviceDescriptor.productId;
-    DeviceDescriptor->InterfaceType = (DaqDeviceInterface)ulDeviceDescriptor.devInterface;
+    DeviceDescriptor->InterfaceType = (CBW_DaqDeviceInterface)ulDeviceDescriptor.devInterface;
     strcpy(DeviceDescriptor->DevString, ulDeviceDescriptor.devString);
     strcpy(DeviceDescriptor->UniqueID, ulDeviceDescriptor.uniqueId);
     memcpy(DeviceDescriptor->Reserved, ulDeviceDescriptor.reserved, sizeof(DeviceDescriptor->Reserved));
     return error;
 }
 
-int cbCreateDaqDevice(int BoardNum, DaqDeviceDescriptor DeviceDescriptor)
+int cbCreateDaqDevice(int BoardNum, CBW_DaqDeviceDescriptor DeviceDescriptor)
 {
-    uldaq::DaqDeviceDescriptor ulDeviceDescriptor;
+    DaqDeviceDescriptor ulDeviceDescriptor;
     strcpy(ulDeviceDescriptor.productName, DeviceDescriptor.ProductName);
     ulDeviceDescriptor.productId = DeviceDescriptor.ProductID;
-    ulDeviceDescriptor.devInterface = (uldaq::DaqDeviceInterface)DeviceDescriptor.InterfaceType;
+    ulDeviceDescriptor.devInterface = (DaqDeviceInterface)DeviceDescriptor.InterfaceType;
     strcpy(ulDeviceDescriptor.devString, DeviceDescriptor.DevString);
     strcpy(ulDeviceDescriptor.uniqueId, DeviceDescriptor.UniqueID);
     memcpy(ulDeviceDescriptor.reserved, DeviceDescriptor.Reserved, sizeof(DeviceDescriptor.Reserved));
-    uldaq::DaqDeviceHandle devHandle = uldaq::ulCreateDaqDevice(ulDeviceDescriptor);
-    mcBoard *pBoard = new mcBoard(ulDeviceDescriptor, devHandle);
-    boardList[BoardNum] = pBoard;
+    DaqDeviceHandle devHandle = ulCreateDaqDevice(ulDeviceDescriptor);
+    boardList[BoardNum] = new mcBoard(ulDeviceDescriptor, devHandle);
     return NOERRORS;
 }
 
