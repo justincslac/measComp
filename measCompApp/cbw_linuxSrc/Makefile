@@ -7,7 +7,6 @@ include $(TOP)/configure/CONFIG
 #=============================
 # Build the IOC support library
 
-INC += uldaq.h
 INC += cbw_linux.h
 
 LIBRARY_IOC_Linux += cbw_linux
