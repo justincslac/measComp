@@ -15,7 +15,6 @@ mcBoard::mcBoard(DaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDev
     long long infoValue;
     
     error = ulConnectDaqDevice(daqDeviceHandle_);
-printf("mcBoard::mcBoard ulConnectDaqDevice returned %d\n", error);
     strcpy(boardName_, daqDeviceDescriptor_.productName);
     biBoardType_    = daqDeviceDescriptor.productId;
     biNumTempChans_ = 0;
@@ -38,6 +37,7 @@ printf("mcBoard::mcBoard ulConnectDaqDevice returned %d\n", error);
     diDevType_ = infoValue;
     error = ulDIOGetInfo(daqDeviceHandle_, DIO_INFO_NUM_BITS, 0, &infoValue);
     diNumBits_ = infoValue;
+    if (error != ERR_NO_ERROR) printf("mcBoard::mcBoard error=%d\n", error);
 }
 
 
@@ -88,8 +88,52 @@ int mcBoard::gainToRange(int Gain, Range *range)
 
       case CBW_MA0TO20:       *range = MA0TO20; break;
       default:
-          printf("mcBoard::GainToRange unsupported Gain=%d\n", Gain);
+          printf("mcBoard::gainToRange unsupported Gain=%d\n", Gain);
           return BADRANGE;
+    }
+    return NOERRORS;
+}
+
+int mcBoard::mapTriggerType(int cbwTriggerType, TriggerType *triggerType)
+{
+    // Converts cbw trigger type to uldaq trigger type;
+    switch (cbwTriggerType) {
+      case CBW_TRIG_POS_EDGE:       *triggerType = TRIG_POS_EDGE; break;
+      case CBW_TRIG_NEG_EDGE:       *triggerType = TRIG_NEG_EDGE; break;
+      case CBW_TRIG_HIGH:           *triggerType = TRIG_HIGH; break;
+      case CBW_TRIG_LOW:            *triggerType = TRIG_LOW; break;
+      case CBW_GATE_HIGH:           *triggerType = GATE_HIGH; break;
+      case CBW_GATE_LOW:            *triggerType = GATE_LOW; break;
+      case CBW_TRIG_RISING:         *triggerType = TRIG_RISING; break;
+      case CBW_TRIG_FALLING:        *triggerType = TRIG_FALLING; break;
+      case CBW_TRIGABOVE:           *triggerType = TRIG_ABOVE; break;
+      case CBW_TRIGBELOW:           *triggerType = TRIG_BELOW; break;
+      case CBW_GATE_ABOVE:          *triggerType = GATE_ABOVE; break;
+      case CBW_GATE_BELOW:          *triggerType = GATE_BELOW; break;
+      case CBW_GATE_IN_WINDOW:      *triggerType = GATE_IN_WINDOW; break;
+      case CBW_GATE_OUT_WINDOW:     *triggerType = GATE_OUT_WINDOW; break;
+      case CBW_TRIG_PATTERN_EQ:     *triggerType = TRIG_PATTERN_EQ; break;
+      case CBW_TRIG_PATTERN_NE:     *triggerType = TRIG_PATTERN_NE; break;
+      case CBW_TRIG_PATTERN_ABOVE:  *triggerType = TRIG_PATTERN_ABOVE; break;
+      case CBW_TRIG_PATTERN_BELOW:  *triggerType = TRIG_PATTERN_BELOW; break;
+      default:
+          printf("mcBoard::mapTriggerType unsupported cbwTriggerType=%d\n", cbwTriggerType);
+          *triggerType = TRIG_NONE;
+          return BADTRIGTYPE;
+    }
+    return NOERRORS;
+}
+
+int mcBoard::mapAiChanType(int cbwChanType, AiChanType *chanType)
+{
+    // Converts cbw chan type to uldaq AiChanType;
+    switch (cbwChanType) {
+      case AI_CHAN_TYPE_VOLTAGE:  *chanType = AI_VOLTAGE; break;
+      case AI_CHAN_TYPE_TC:       *chanType = AI_TC; break;
+      default:
+          printf("mcBoard::mapAiChanType unsupported cbwChanType=%d\n", cbwChanType);
+          *chanType = AI_VOLTAGE;
+          return BADCHANTYPE;
     }
     return NOERRORS;
 }
@@ -146,8 +190,40 @@ int mcBoard::cbGetConfig(int InfoType, int DevNum, int ConfigItem, int *ConfigVa
 
 int mcBoard::cbSetConfig(int InfoType, int DevNum, int ConfigItem, int ConfigVal)
 {
-    printf("Function cbSetConfig not supported\n");
-    return NOERRORS;
+    UlError error = ERR_NO_ERROR;
+    switch (InfoType) {
+      case BOARDINFO:
+        switch (ConfigItem) {
+          case BIADTRIGCOUNT:
+            aiScanTrigCount_ = ConfigVal;
+            break;
+          case BIADCHANTYPE:
+            AiChanType chanType;
+            mapAiChanType(ConfigVal, &chanType);
+            error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TC_TYPE, DevNum, chanType);
+          case BICHANTCTYPE:
+            // The enums for TcType are the same in cbw.h and uldaq.h, so we don't need to convert ConfigVal
+            error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TC_TYPE, DevNum, ConfigVal);
+            break;
+/* How do we set RTD type?
+          case BICHANRTDTYPE:
+            usbSetItem_USBTEMP_AI(hidDevice_, DevNum/2, USB_TEMP_AI_CONNECTION_TYPE, ConfigVal);
+            break;
+*/
+          case BIDACRANGE:
+            gainToRange(ConfigVal, &aoRange_);
+          default:
+            printf("mcBoard::cbSetConfig error unknown ConfigItem %d\n", ConfigItem);
+            return BADCONFIGITEM;
+            break;
+        }
+        break;
+      default:
+        printf("mcBoard::cbSetConfig error unknown InfoType %d\n", InfoType);
+        return BADCONFIGTYPE;
+        break;
+    }
+    return error;
 }
 
 int mcBoard::cbGetBoardName(char *BoardName)
@@ -219,7 +295,7 @@ int mcBoard::cbAInScan(int LowChan, int HighChan, long Count, long *Rate,
 
 int mcBoard::cbAInputMode(int InputMode)
 {
-    printf("Function cbAInputMode not supported\n");
+    aiInputMode_ = (InputMode == DIFFERENTIAL) ? AI_DIFFERENTIAL : AI_SINGLE_ENDED;
     return NOERRORS;
 }
 
@@ -257,7 +333,6 @@ int mcBoard::cbCLoad32(int RegNum, unsigned int LoadValue)
 {
     // Hardcoding CTR_COUNT, may need to be CRT_LOAD?
     UlError error = ulCLoad(daqDeviceHandle_, RegNum, CRT_LOAD, LoadValue);
-printf("mcBoard::cbCLoad32 wrote to CRT_LOAD register error=%d\n", error);
     return error;
 }
 
@@ -381,8 +456,9 @@ int mcBoard::cbVIn(int Chan, int Gain, float *DataValue, int Options)
 // Trigger functions
 int mcBoard::cbSetTrigger(int TrigType, unsigned short LowThreshold, unsigned short HighThreshold)
 {
-    printf("cbSetTrigger is not supported\n");
-    return NOERRORS;
+    // In uldaq there are separate calls for ulDaqInSetTrigger, ulDaqOutSetTrigger, etc.
+    // We just cache the information here and then call those functions when starting the appropriate scan
+    return mapTriggerType(TrigType, &triggerType_);
 }
 
 // Daq functions
@@ -393,11 +469,9 @@ int mcBoard::cbDaqInScan(short *ChanArray, short *ChanTypeArray, short *GainArra
     return NOERRORS;
 }
 
-
 int mcBoard::cbDaqSetTrigger(int TrigSource, int TrigSense, int TrigChan, int ChanType,
                              int Gain, float Level, float Variance, int TrigEvent)
 {
     printf("cbDaqSetTrigger is not supported\n");
     return NOERRORS;
 }
-
