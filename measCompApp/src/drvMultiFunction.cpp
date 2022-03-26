@@ -1358,6 +1358,7 @@ asynStatus MultiFunction::writeInt32(asynUser *pasynUser, epicsInt32 value)
 {
   int addr;
   int function = pasynUser->reason;
+  int range;
   int status=0;
   static const char *functionName = "writeInt32";
 
@@ -1462,7 +1463,8 @@ asynStatus MultiFunction::writeInt32(asynUser *pasynUser, epicsInt32 value)
         driverName, functionName);
       return asynError;
     }
-    status = cbAOut(boardNum_, addr, BIP10VOLTS, value);
+    getIntegerParam(addr, analogOutRange_, &range);
+    status = cbAOut(boardNum_, addr, range, value);
   }
 
   // Waveform generator functions
