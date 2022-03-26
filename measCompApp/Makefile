@@ -1,8 +1,6 @@
 TOP = ..
 include $(TOP)/configure/CONFIG
-DIRS := $(DIRS) Linux_Drivers
 DIRS := $(DIRS) cbw_linuxSrc
-cbw_linuxSrc_DEPEND_DIRS += Linux_Drivers
 DIRS := $(DIRS) src
 src_DEPEND_DIRS += cbw_linuxSrc
 DIRS := $(DIRS) demoSrc
