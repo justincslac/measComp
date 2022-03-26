@@ -12,6 +12,7 @@ public:
     int mapTriggerType(int cbwTriggerType, TriggerType *triggerType);
     int mapAiChanType(int cbwChanType, AiChanType *chanType);
     int mapError(UlError error);
+    int mapScanOptions(int cbwOptions, ScanOption *options);
 
     // System functions
     int cbGetBoardName(char *BoardName);
@@ -78,8 +79,16 @@ protected:
     Range aiRange_;
     AInFlag aiFlags_;
     int aiScanTrigCount_;
+    AiQueueElement *aiScanQueue_;
     Range aoRange_;
     AOutFlag aoFlags_;
+    bool aiScanInProgress_;
+    bool aoScanInProgress_;
+    bool daqiScanInProgress_;
+    bool daqoScanInProgress_;
+    bool diScanInProgress_;
+    bool doScanInProgress_;
+    bool ctrScanInProgress_;
     TriggerType triggerType_;
     int biBoardType_;
     int biNumADCChans_;

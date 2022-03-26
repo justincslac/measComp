@@ -9,7 +9,15 @@ mcBoard::mcBoard(DaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDev
     daqDeviceHandle_(daqDeviceHandle),
     aiInputMode_(AI_SINGLE_ENDED),
     aiFlags_(AIN_FF_NOSCALEDATA),
-    aoFlags_(AOUT_FF_NOSCALEDATA)
+    aiScanQueue_(0),
+    aoFlags_(AOUT_FF_NOSCALEDATA),
+    aiScanInProgress_(false),
+    aoScanInProgress_(false),
+    daqiScanInProgress_(false),
+    daqoScanInProgress_(false),
+    diScanInProgress_(false),
+    doScanInProgress_(false),
+    ctrScanInProgress_(false)
 {
     UlError error;
     long long infoValue;
@@ -111,6 +119,7 @@ int mcBoard::mapError(UlError error)
 {
     // Converts UlError to cbw error
     int cbwError;
+    char errMsg[ERR_MSG_LEN];
     switch (error) {
       case ERR_NO_ERROR:              cbwError = NOERRORS; break;
 //      case ERR_UNHANDLED_EXCEPTION:   cbwError = ; break;
@@ -123,7 +132,11 @@ int mcBoard::mapError(UlError error)
       case ERR_OPEN_CONNECTION:       cbwError = OPENCONNECTION; break;
       default:
           printf("mcBoard::mapError unsupported UlError=%d\n", error);
-          cbwError = BADBOARD;
+          cbwError = 2000 + error;
+    }
+    if (error != ERR_NO_ERROR) {
+        ulGetErrMsg(error, errMsg);
+        printf("mcBoard::mapError error=%d, message=%s\n", error, errMsg);
     }
     return cbwError;
 }
@@ -169,6 +182,26 @@ int mcBoard::mapAiChanType(int cbwChanType, AiChanType *chanType)
           *chanType = AI_VOLTAGE;
           return BADCHANTYPE;
     }
+    return NOERRORS;
+}
+
+int mcBoard::mapScanOptions(int cbwOptions, ScanOption *scanOptions)
+{
+    // Converts cbw scan options to uldaq ScanOption;
+    int options = SO_DEFAULTIO;
+    if (cbwOptions & SINGLEIO)    options |= SO_SINGLEIO;
+    if (cbwOptions & BLOCKIO)     options |= SO_BLOCKIO;
+    if (cbwOptions & BURSTIO)     options |= SO_BURSTIO;
+    if (cbwOptions & CONTINUOUS)  options |= SO_CONTINUOUS;
+    if (cbwOptions & EXTCLOCK)    options |= SO_EXTCLOCK;
+    if (cbwOptions & EXTTRIGGER)  options |= SO_EXTTRIGGER;
+    if (cbwOptions & RETRIGMODE)  options |= SO_RETRIGGER;
+    if (cbwOptions & BURSTMODE)   options |= SO_BURSTMODE;
+//    if (cbwOptions & XXX)       options |= SO_PACEROUT;
+//    if (cbwOptions & XXX)       options |= SO_EXTTIMEBASE;
+//    if (cbwOptions & XXX)       options |= SO_TIMEBASEOUT;
+  
+    *scanOptions = (ScanOption) options;
     return NOERRORS;
 }
 
@@ -273,10 +306,39 @@ int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex, int Fu
     UlError error = ERR_NO_ERROR;
     switch (FunctionType) { 
       case AIFUNCTION:
-        error = ulDaqInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        if (aiScanInProgress_) {
+            error = ulAInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        }
         break;
       case AOFUNCTION:
-        error = ulDaqOutScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        if (aoScanInProgress_) {
+          error = ulAOutScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        }
+        break;
+      case DIFUNCTION:
+        if (diScanInProgress_) {
+            error = ulDInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        }
+        break;
+      case DOFUNCTION:
+        if (doScanInProgress_) {
+          error = ulDOutScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        }
+        break;
+      case CTRFUNCTION:
+        if (ctrScanInProgress_) {
+          error = ulCInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        }
+        break;
+      case DAQIFUNCTION:
+        if (daqiScanInProgress_) {
+          error = ulDaqInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        }
+        break;
+      case DAQOFUNCTION:
+        if (daqoScanInProgress_) {
+          error = ulDaqOutScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+        }
         break;
     }
     *Status = scanStatus;
@@ -291,9 +353,11 @@ int mcBoard::cbStopIOBackground(int FunctionType)
     switch (FunctionType) { 
       case AIFUNCTION:
         error = ulDaqInScanStop(daqDeviceHandle_);
+        aiScanInProgress_ = false;
         break;
       case AOFUNCTION:
         error = ulDaqOutScanStop(daqDeviceHandle_);
+        aoScanInProgress_ = false;
         break;
     }
     return mapError(error);
@@ -323,8 +387,17 @@ int mcBoard::cbAIn32(int Chan, int Gain, unsigned int *DataValue, int Options)
 int mcBoard::cbAInScan(int LowChan, int HighChan, long Count, long *Rate,
                        int Gain, void * MemHandle, int Options)
 {
-    printf("Function cbAInScan not supported\n");
-    return NOERRORS;
+    Range range;
+    mapRange(Gain, &range);
+    ScanOption scanOptions;
+    mapScanOptions(Options, &scanOptions);
+    double rate = (double) *Rate;
+    int samplesPerChan = Count / (HighChan - LowChan + 1);
+
+    UlError error = ulAInScan(daqDeviceHandle_, LowChan, HighChan, aiInputMode_, range, samplesPerChan, &rate, 
+                              scanOptions, AINSCAN_FF_DEFAULT, (double *)MemHandle);
+    aiScanInProgress_ = true;
+    return mapError(error);
 }
 
 int mcBoard::cbAInputMode(int InputMode)
@@ -335,8 +408,15 @@ int mcBoard::cbAInputMode(int InputMode)
 
 int mcBoard::cbALoadQueue(short *ChanArray, short *GainArray, int NumChans)
 {
-    printf("Function cbALoadQueue not supported\n");
-    return NOERRORS;
+    if (aiScanQueue_) free(aiScanQueue_);
+    aiScanQueue_ = (AiQueueElement *)calloc(NumChans, sizeof(AiQueueElement));
+    for (int i=0; i<NumChans; i++) {
+        aiScanQueue_[i].channel = ChanArray[i];
+        aiScanQueue_[i].inputMode = aiInputMode_;
+        mapRange(GainArray[i], &aiScanQueue_[i].range);
+    }
+    UlError error = ulAInLoadQueue(daqDeviceHandle_, aiScanQueue_, NumChans);
+    return mapError(error);
 }
 
 int mcBoard::cbAOut(int Chan, int Gain, unsigned short DataValue)
