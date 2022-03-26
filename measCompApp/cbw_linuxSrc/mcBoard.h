@@ -9,6 +9,8 @@ public:
     mcBoard(DaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDeviceHandle);
 
     int gainToRange(int Gain, Range *range);
+    int mapTriggerType(int cbwTriggerType, TriggerType *triggerType);
+    int mapAiChanType(int cbwChanType, AiChanType *chanType);
 
     // System functions
     int cbGetBoardName(char *BoardName);
@@ -74,8 +76,10 @@ protected:
     AiInputMode aiInputMode_;
     Range aiRange_;
     AInFlag aiFlags_;
+    int aiScanTrigCount_;
     Range aoRange_;
     AOutFlag aoFlags_;
+    TriggerType triggerType_;
     int biBoardType_;
     int biNumADCChans_;
     int biADCRes_;
