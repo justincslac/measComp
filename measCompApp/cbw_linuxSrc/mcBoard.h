@@ -8,9 +8,10 @@ class mcBoard {
 public:
     mcBoard(DaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDeviceHandle);
 
-    int gainToRange(int Gain, Range *range);
+    int mapRange(int Gain, Range *range);
     int mapTriggerType(int cbwTriggerType, TriggerType *triggerType);
     int mapAiChanType(int cbwChanType, AiChanType *chanType);
+    int mapError(UlError error);
 
     // System functions
     int cbGetBoardName(char *BoardName);
