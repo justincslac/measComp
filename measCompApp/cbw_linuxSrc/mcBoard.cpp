@@ -115,7 +115,7 @@ int mcBoard::mapRange(int Gain, Range *range)
     return NOERRORS;
 }
 
-int mcBoard::mapError(UlError error)
+int mcBoard::mapError(UlError error, const char *message)
 {
     // Converts UlError to cbw error
     int cbwError;
@@ -136,7 +136,7 @@ int mcBoard::mapError(UlError error)
     }
     if (error != ERR_NO_ERROR) {
         ulGetErrMsg(error, errMsg);
-        printf("mcBoard::mapError error=%d, message=%s\n", error, errMsg);
+        printf("mcBoard::mapError %s error=%d, message=%s\n", message, error, errMsg);
     }
     return cbwError;
 }
@@ -267,7 +267,7 @@ int mcBoard::cbSetConfig(int InfoType, int DevNum, int ConfigItem, int ConfigVal
           case BIADCHANTYPE:
             AiChanType chanType;
             mapAiChanType(ConfigVal, &chanType);
-            error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TC_TYPE, DevNum, chanType);
+            error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TYPE, DevNum, chanType);
           case BICHANTCTYPE:
             // The enums for TcType are the same in cbw.h and uldaq.h, so we don't need to convert ConfigVal
             error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TC_TYPE, DevNum, ConfigVal);
@@ -290,7 +290,7 @@ int mcBoard::cbSetConfig(int InfoType, int DevNum, int ConfigItem, int ConfigVal
         return BADCONFIGTYPE;
         break;
     }
-    return mapError(error);
+    return mapError(error, "ulAISetConfig()");
 }
 
 int mcBoard::cbGetBoardName(char *BoardName)
@@ -344,7 +344,7 @@ int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex, int Fu
     *Status = scanStatus;
     *CurCount = xferStatus.currentTotalCount;
     *CurIndex = xferStatus.currentIndex;
-    return mapError(error);
+    return mapError(error, "cbGetIOStatus()");
 }
 
 int mcBoard::cbStopIOBackground(int FunctionType)
@@ -352,15 +352,15 @@ int mcBoard::cbStopIOBackground(int FunctionType)
     UlError error = ERR_NO_ERROR;
     switch (FunctionType) { 
       case AIFUNCTION:
-        error = ulDaqInScanStop(daqDeviceHandle_);
+        error = ulAInScanStop(daqDeviceHandle_);
         aiScanInProgress_ = false;
         break;
       case AOFUNCTION:
-        error = ulDaqOutScanStop(daqDeviceHandle_);
+        error = ulAOutScanStop(daqDeviceHandle_);
         aoScanInProgress_ = false;
         break;
     }
-    return mapError(error);
+    return mapError(error, "cbStopIOBackground()");
 }
 
 // Analog I/O functions
@@ -371,7 +371,7 @@ int mcBoard::cbAIn(int Chan, int Gain, unsigned short *DataValue)
     mapRange(Gain, &range);
     UlError error = ulAIn(daqDeviceHandle_, Chan, aiInputMode_, range, AIN_FF_NOSCALEDATA, &data);
     *DataValue = (unsigned short)data;
-    return mapError(error);
+    return mapError(error, "ulAIn()");
 }
 
 int mcBoard::cbAIn32(int Chan, int Gain, unsigned int *DataValue, int Options)
@@ -381,23 +381,27 @@ int mcBoard::cbAIn32(int Chan, int Gain, unsigned int *DataValue, int Options)
     mapRange(Gain, &range);
     UlError error = ulAIn(daqDeviceHandle_, Chan, aiInputMode_, range, AIN_FF_NOSCALEDATA, &data);
     *DataValue = (unsigned int)data;
-    return mapError(error);
+    return mapError(error, "ulAIn()");
 }
 
 int mcBoard::cbAInScan(int LowChan, int HighChan, long Count, long *Rate,
                        int Gain, void * MemHandle, int Options)
 {
     Range range;
+    UlError error;
     mapRange(Gain, &range);
     ScanOption scanOptions;
     mapScanOptions(Options, &scanOptions);
     double rate = (double) *Rate;
     int samplesPerChan = Count / (HighChan - LowChan + 1);
 
-    UlError error = ulAInScan(daqDeviceHandle_, LowChan, HighChan, aiInputMode_, range, samplesPerChan, &rate, 
-                              scanOptions, AINSCAN_FF_DEFAULT, (double *)MemHandle);
+    error = ulAInSetTrigger(daqDeviceHandle_, triggerType_, 0, 0, 0, 0);    
+    mapError(error, "ulAInSetTrigger()");
+
+    error = ulAInScan(daqDeviceHandle_, LowChan, HighChan, aiInputMode_, range, samplesPerChan, &rate, 
+                      scanOptions, AINSCAN_FF_DEFAULT, (double *)MemHandle);
     aiScanInProgress_ = true;
-    return mapError(error);
+    return mapError(error, "ulAInScan()");
 }
 
 int mcBoard::cbAInputMode(int InputMode)
@@ -416,7 +420,7 @@ int mcBoard::cbALoadQueue(short *ChanArray, short *GainArray, int NumChans)
         mapRange(GainArray[i], &aiScanQueue_[i].range);
     }
     UlError error = ulAInLoadQueue(daqDeviceHandle_, aiScanQueue_, NumChans);
-    return mapError(error);
+    return mapError(error, "ulAInLoadQueue()");
 }
 
 int mcBoard::cbAOut(int Chan, int Gain, unsigned short DataValue)
@@ -424,7 +428,7 @@ int mcBoard::cbAOut(int Chan, int Gain, unsigned short DataValue)
     Range range;
     mapRange(Gain, &range);
     UlError error = ulAOut(daqDeviceHandle_, Chan, range, AOUT_FF_NOSCALEDATA, (double)DataValue);
-    return mapError(error);
+    return mapError(error, "ulAOut()");
 }
 
 int mcBoard::cbAOutScan(int LowChan, int HighChan,
@@ -440,14 +444,14 @@ int mcBoard::cbCIn32(int CounterNum, unsigned int *Count)
     unsigned long long data;
     UlError error = ulCIn(daqDeviceHandle_, CounterNum, &data);
     *Count = (unsigned int)data;
-    return mapError(error);
+    return mapError(error, "ulCIn()");
 }
 
 int mcBoard::cbCLoad32(int RegNum, unsigned int LoadValue)
 {
     // Hardcoding CTR_COUNT, may need to be CRT_LOAD?
     UlError error = ulCLoad(daqDeviceHandle_, RegNum, CRT_LOAD, LoadValue);
-    return mapError(error);
+    return mapError(error, "ulCLoad()");
 }
 
 int mcBoard::cbCInScan(int FirstCtr,int LastCtr, int Count,
@@ -470,21 +474,21 @@ int mcBoard::cbDBitOut(int PortType, int BitNum, unsigned short BitValue)
 {
     // cbw.h and uldaq.h use the same enums for PortType
     UlError error = ulDBitOut(daqDeviceHandle_, (DigitalPortType)PortType, BitNum, BitValue);
-    return mapError(error);
+    return mapError(error, "ulDBitOut()");
 }
 
 int mcBoard::cbDConfigPort(int PortType, int Direction)
 {
     DigitalDirection dir = (Direction == DIGITALOUT) ? DD_OUTPUT : DD_INPUT;
     UlError error = ulDConfigPort(daqDeviceHandle_, (DigitalPortType)PortType, dir);
-    return mapError(error);
+    return mapError(error, "ulDConfigPort()");
 }
 
 int mcBoard::cbDConfigBit(int PortType, int BitNum, int Direction)
 {
     DigitalDirection dir = (Direction == DIGITALOUT) ? DD_OUTPUT : DD_INPUT;
     UlError error = ulDConfigBit(daqDeviceHandle_, (DigitalPortType)PortType, BitNum, dir);
-    return mapError(error);
+    return mapError(error, "ulDConfigBit()");
 }
 
 int mcBoard::cbDIn(int PortType, unsigned short *DataValue)
@@ -492,7 +496,7 @@ int mcBoard::cbDIn(int PortType, unsigned short *DataValue)
     unsigned long long data;
     UlError error = ulDIn(daqDeviceHandle_, (DigitalPortType)PortType, &data);
     *DataValue = (unsigned short)data;
-    return mapError(error);
+    return mapError(error, "ulDIn()");
 }
 
 int mcBoard::cbDIn32(int PortType, unsigned int *DataValue)
@@ -500,19 +504,19 @@ int mcBoard::cbDIn32(int PortType, unsigned int *DataValue)
     unsigned long long data;
     UlError error = ulDIn(daqDeviceHandle_, (DigitalPortType)PortType, &data);
     *DataValue = (unsigned int)data;
-    return mapError(error);
+    return mapError(error, "ulDIn()");
 }
 
 int mcBoard::cbDOut(int PortType, unsigned short DataValue)
 {
     UlError error = ulDOut(daqDeviceHandle_, (DigitalPortType)PortType, DataValue);
-    return mapError(error);
+    return mapError(error, "ulDOut()");
 }
 
 int mcBoard::cbDOut32(int PortType, unsigned int DataValue)
 {
     UlError error = ulDOut(daqDeviceHandle_, (DigitalPortType)PortType, DataValue);
-    return mapError(error);
+    return mapError(error, "ulDOut()");
 }
 
 // Pulse functions
@@ -525,13 +529,13 @@ int mcBoard::cbPulseOutStart(int TimerNum, double *Frequency,
     PulseOutOption pulseOptions = (PulseOutOption)Options;
     UlError error = ulTmrPulseOutStart(daqDeviceHandle_, TimerNum, Frequency, DutyCycle, PulseCount, InitialDelay,
                                        idle, pulseOptions);
-    return mapError(error);
+    return mapError(error, "ulTmrPulseOutStart()");
 }
 
 int mcBoard::cbPulseOutStop(int TimerNum)
 {
     UlError error = ulTmrPulseOutStop(daqDeviceHandle_, TimerNum);
-    return mapError(error);
+    return mapError(error, "ulTmrPulseOutStop()");
 }
 
 // Temperature functions
@@ -553,7 +557,7 @@ int mcBoard::cbTIn(int Chan, int Scale, float *TempValue, int Options)
     }
     UlError error = ulTIn(daqDeviceHandle_, Chan, tempScale, flags, &data);
     *TempValue = (float)data;
-    return mapError(error);
+    return mapError(error, "ulTIn()");
 }
 
 // Voltage functions
@@ -564,7 +568,7 @@ int mcBoard::cbVIn(int Chan, int Gain, float *DataValue, int Options)
     mapRange(Gain, &range);
     UlError error = ulAIn(daqDeviceHandle_, Chan, aiInputMode_, range, AIN_FF_DEFAULT, &data);
     *DataValue = (float)data;
-    return mapError(error);
+    return mapError(error, "ulAIn()");
 }
 
 // Trigger functions
