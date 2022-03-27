@@ -11,7 +11,7 @@ public:
     int mapRange(int Gain, Range *range);
     int mapTriggerType(int cbwTriggerType, TriggerType *triggerType);
     int mapAiChanType(int cbwChanType, AiChanType *chanType);
-    int mapError(UlError error);
+    int mapError(UlError error, const char *message);
     int mapScanOptions(int cbwOptions, ScanOption *options);
 
     // System functions
