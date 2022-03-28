@@ -303,47 +303,61 @@ int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex, int Fu
 {
     ScanStatus scanStatus;
     TransferStatus xferStatus;
+    bool scanInProgress = false;
     UlError error = ERR_NO_ERROR;
     switch (FunctionType) { 
       case AIFUNCTION:
         if (aiScanInProgress_) {
-            error = ulAInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+          error = ulAInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+          scanInProgress = true;
         }
         break;
       case AOFUNCTION:
         if (aoScanInProgress_) {
           error = ulAOutScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+          scanInProgress = true;
         }
         break;
       case DIFUNCTION:
         if (diScanInProgress_) {
-            error = ulDInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+          error = ulDInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+          scanInProgress = true;
         }
         break;
       case DOFUNCTION:
         if (doScanInProgress_) {
           error = ulDOutScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+          scanInProgress = true;
         }
         break;
       case CTRFUNCTION:
         if (ctrScanInProgress_) {
           error = ulCInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+          scanInProgress = true;
         }
         break;
       case DAQIFUNCTION:
         if (daqiScanInProgress_) {
           error = ulDaqInScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+          scanInProgress = true;
         }
         break;
       case DAQOFUNCTION:
         if (daqoScanInProgress_) {
           error = ulDaqOutScanStatus(daqDeviceHandle_, &scanStatus, &xferStatus);
+          scanInProgress = true;
         }
         break;
     }
-    *Status = scanStatus;
-    *CurCount = xferStatus.currentTotalCount;
-    *CurIndex = xferStatus.currentIndex;
+    if (scanInProgress) {
+        *Status = scanStatus;
+        *CurCount = xferStatus.currentTotalCount;
+        *CurIndex = xferStatus.currentIndex;
+    } else {
+        *Status = 0;
+        *CurCount = 0;
+        *CurIndex = 0;
+    }
     return mapError(error, "cbGetIOStatus()");
 }
 
@@ -358,6 +372,26 @@ int mcBoard::cbStopIOBackground(int FunctionType)
       case AOFUNCTION:
         error = ulAOutScanStop(daqDeviceHandle_);
         aoScanInProgress_ = false;
+        break;
+      case DAQIFUNCTION:
+        error = ulDaqInScanStop(daqDeviceHandle_);
+        daqiScanInProgress_ = false;
+        break;
+      case DAQOFUNCTION:
+        error = ulDaqOutScanStop(daqDeviceHandle_);
+        daqoScanInProgress_ = false;
+        break;
+      case DIFUNCTION:
+        error = ulDInScanStop(daqDeviceHandle_);
+        diScanInProgress_ = false;
+        break;
+      case DOFUNCTION:
+        error = ulDOutScanStop(daqDeviceHandle_);
+        doScanInProgress_ = false;
+        break;
+      case CTRFUNCTION:
+        error = ulCInScanStop(daqDeviceHandle_);
+        ctrScanInProgress_ = false;
         break;
     }
     return mapError(error, "cbStopIOBackground()");
