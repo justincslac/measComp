@@ -1924,7 +1924,7 @@ void MultiFunction::pollerThread()
   short aoStatus, aiStatus;
   epicsTimeStamp now;
   epicsTimeStamp startTime;
-  int numReadings;
+  int lastPoint;
   int status=0, prevStatus=0;
 
   while(1) {
@@ -1988,7 +1988,7 @@ void MultiFunction::pollerThread()
       }
     }
 
-    if (numAnalogIn_ > 0) {
+    if (waveDigRunning_) {
       // Poll the status of the waveform digitizer input
       status = cbGetStatus(boardNum_, &aiStatus, &aiCount, &aiIndex, AIFUNCTION);
       if (status) {
@@ -1999,21 +1999,20 @@ void MultiFunction::pollerThread()
         }
         // On Windows after a network glitch cbGetStatus will return continually return DEADDEV
         // Need to stop and start the waveform digitizer if it was running
-        if ((status == DEADDEV) && waveDigRunning_) {
+        if (status == DEADDEV) {
           stopWaveDig();
           startWaveDig();
         }
         goto error;
       }
       getIntegerParam(waveDigCurrentPoint_, &currentPoint);
-      numReadings = aiIndex/numWaveDigChans_;
-      if (waveDigRunning_ && numReadings > currentPoint) {
+      lastPoint = aiIndex / numWaveDigChans_ + 1;
+      if (lastPoint > currentPoint) {
         epicsTimeGetCurrent(&now);
         int firstChan;
         getIntegerParam(waveDigFirstChan_, &firstChan);
         int lastChan = firstChan + numWaveDigChans_ - 1;
         epicsFloat64 *pAnalogIn = (epicsFloat64 *)inputMemHandle_ + currentPoint*numWaveDigChans_;
-        int lastPoint = aiIndex / numWaveDigChans_ + 1;
         for(; currentPoint < lastPoint; currentPoint++) {
           for (int j=firstChan; j<=lastChan; j++) {
             waveDigBuffer_[j][currentPoint] = *pAnalogIn++;
@@ -2022,7 +2021,7 @@ void MultiFunction::pollerThread()
         }
         setIntegerParam(waveDigCurrentPoint_, currentPoint);
       }
-      if (waveDigRunning_ && (aiStatus == 0)) {
+      if (aiStatus == 0) {
         stopWaveDig();
       }
     }
