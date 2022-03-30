@@ -60,12 +60,36 @@ mcBoard::mcBoard(DaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDev
     error = ulDIOGetInfo(daqDeviceHandle_, DIO_INFO_NUM_BITS, 0, &infoValue);
     if (error == ERR_NO_ERROR) diNumBits_ = infoValue;
     
+    diInMask_ = 0;
+    diOutMask_ = 0;
+    error = ulDIOGetInfo(daqDeviceHandle_, DIO_INFO_PORT_IO_TYPE, 0, &infoValue);
+    if (error == ERR_NO_ERROR) {
+        switch (infoValue) {
+          case DPIOT_IN: 
+            diInMask_  = 0xff; 
+            diOutMask_ = 0;
+            break;
+          case DPIOT_OUT:
+            diInMask_  = 0;
+            diOutMask_ = 0xff;
+            break;
+          case DPIOT_IO:
+          case DPIOT_NONCONFIG: 
+            diInMask_  = 0xff;
+            diOutMask_ = 0xff;
+            break;
+          case DPIOT_BITIO: 
+            diInMask_  = 0;
+            diOutMask_ = 0;
+            break;
+        }
+    }
+
     // Default values for thermocouple type
     for (int i=0; i<MAX_TEMP_CHANS; i++) {
         tcType_[i] = TC_J;
     }
 }
-
 
 int mcBoard::mapRange(int Gain, Range *range)
 {
@@ -139,7 +163,7 @@ int mcBoard::mapError(UlError error, const char *message)
           printf("mcBoard::mapError unmapped UlError=%d\n", error);
           cbwError = 2000 + error;
     }
-    if (error != ERR_NO_ERROR) {
+    if (error != ERR_NO_ERROR && error != ERR_OPEN_CONNECTION) {
         ulGetErrMsg(error, errMsg);
         printf("mcBoard::mapError %s error=%d, message=%s\n", message, error, errMsg);
     }
