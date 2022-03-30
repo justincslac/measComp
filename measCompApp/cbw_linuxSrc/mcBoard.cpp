@@ -59,6 +59,11 @@ mcBoard::mcBoard(DaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDev
     diNumBits_ = 0;
     error = ulDIOGetInfo(daqDeviceHandle_, DIO_INFO_NUM_BITS, 0, &infoValue);
     if (error == ERR_NO_ERROR) diNumBits_ = infoValue;
+    
+    // Default values for thermocouple type
+    for (int i=0; i<MAX_TEMP_CHANS; i++) {
+        tcType_[i] = TC_J;
+    }
 }
 
 
@@ -131,7 +136,7 @@ int mcBoard::mapError(UlError error, const char *message)
       case ERR_DEV_NOT_CONNECTED:     cbwError = NETCONNECTIONFAILED; break;
       case ERR_OPEN_CONNECTION:       cbwError = OPENCONNECTION; break;
       default:
-          printf("mcBoard::mapError unsupported UlError=%d\n", error);
+          printf("mcBoard::mapError unmapped UlError=%d\n", error);
           cbwError = 2000 + error;
     }
     if (error != ERR_NO_ERROR) {
@@ -190,7 +195,7 @@ int mcBoard::mapScanOptions(int cbwOptions, ScanOption *scanOptions)
     // Converts cbw scan options to uldaq ScanOption;
     int options = SO_DEFAULTIO;
     if (cbwOptions & SINGLEIO)    options |= SO_SINGLEIO;
-    if (cbwOptions & BLOCKIO)     options |= SO_BLOCKIO;
+    if ((cbwOptions & BLOCKIO) == BLOCKIO)     options |= SO_BLOCKIO;
     if (cbwOptions & BURSTIO)     options |= SO_BURSTIO;
     if (cbwOptions & CONTINUOUS)  options |= SO_CONTINUOUS;
     if (cbwOptions & EXTCLOCK)    options |= SO_EXTCLOCK;
@@ -258,6 +263,7 @@ int mcBoard::cbGetConfig(int InfoType, int DevNum, int ConfigItem, int *ConfigVa
 int mcBoard::cbSetConfig(int InfoType, int DevNum, int ConfigItem, int ConfigVal)
 {
     UlError error = ERR_NO_ERROR;
+    long long infoValue;
     switch (InfoType) {
       case BOARDINFO:
         switch (ConfigItem) {
@@ -268,9 +274,22 @@ int mcBoard::cbSetConfig(int InfoType, int DevNum, int ConfigItem, int ConfigVal
             AiChanType chanType;
             mapAiChanType(ConfigVal, &chanType);
             error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TYPE, DevNum, chanType);
+            // When changing to AI_TC mode may need to set the thermocouple type because it may only be cached
+            if (chanType == AI_TC) {
+                error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TC_TYPE, DevNum, tcType_[DevNum]);
+            }
+           
+            break;
           case BICHANTCTYPE:
-            // The enums for TcType are the same in cbw.h and uldaq.h, so we don't need to convert ConfigVal
-            error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TC_TYPE, DevNum, ConfigVal);
+            // Cache the type
+            tcType_[DevNum] = (TcType)ConfigVal;
+            // We get an error writing the thermocouple type if the input mode is not thermocouple
+            // so read the current channel type and only set the TC type if it is in thermocouple mode
+            error = ulAIGetConfig(daqDeviceHandle_, AI_CFG_CHAN_TYPE, DevNum, &infoValue);
+            if (infoValue == AI_TC) {
+                // The enums for TcType are the same in cbw.h and uldaq.h, so we don't need to convert ConfigVal
+                error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TC_TYPE, DevNum, tcType_[DevNum]);
+            }
             break;
 /* How do we set RTD type?
           case BICHANRTDTYPE:
@@ -279,6 +298,10 @@ int mcBoard::cbSetConfig(int InfoType, int DevNum, int ConfigItem, int ConfigVal
 */
           case BIDACRANGE:
             mapRange(ConfigVal, &aoRange_);
+            break;
+          case BIDACTRIGCOUNT:
+            aoTrigCount_ = ConfigVal;
+            break;
           default:
             printf("mcBoard::cbSetConfig error unknown ConfigItem %d\n", ConfigItem);
             return BADCONFIGITEM;
@@ -483,24 +506,135 @@ int mcBoard::cbCIn32(int CounterNum, unsigned int *Count)
 
 int mcBoard::cbCLoad32(int RegNum, unsigned int LoadValue)
 {
-    // Hardcoding CTR_COUNT, may need to be CRT_LOAD?
-    UlError error = ulCLoad(daqDeviceHandle_, RegNum, CRT_LOAD, LoadValue);
+    int counterNum = RegNum;
+    CounterRegisterType registerType = CRT_LOAD;
+    if (RegNum >= MINLIMITREG0 && RegNum <= MINLIMITREG7) {
+        counterNum = RegNum - MINLIMITREG0;
+        registerType = CRT_MIN_LIMIT;
+    }
+    else if (RegNum >= MAXLIMITREG0 && RegNum <= MAXLIMITREG7) {
+        counterNum = RegNum - MAXLIMITREG0;
+        registerType = CRT_MAX_LIMIT;
+    }
+    else if (RegNum >= OUTPUTVAL0REG0 && RegNum <= OUTPUTVAL0REG7) {
+        counterNum = RegNum - OUTPUTVAL0REG0;
+        registerType = CRT_OUTPUT_VAL0;
+    }
+    else if (RegNum >= OUTPUTVAL1REG0 && RegNum <= OUTPUTVAL1REG7) {
+        counterNum = RegNum - OUTPUTVAL1REG0;
+        registerType = CRT_OUTPUT_VAL1;
+    }
+    UlError error = ulCLoad(daqDeviceHandle_, counterNum, registerType, LoadValue);
     return mapError(error, "ulCLoad()");
 }
 
 int mcBoard::cbCInScan(int FirstCtr,int LastCtr, int Count,
                        int *Rate, void * MemHandle, unsigned int Options)
 {
-    printf("Function cbCInScan not supported\n");
-    return NOERRORS;
+    int samplesPerCounter = 1;
+    UlError error;
+    double rate = *Rate;
+    ScanOption scanOptions;
+    int flags = CINSCAN_FF_DEFAULT;
+    mapScanOptions(Options, &scanOptions);
+
+//    error = ulCInSetTrigger(daqDeviceHandle_, triggerType_, 0, 0, 0, 0);
+//    mapError(error, "ulCInSetTrigger");
+
+    if (Options & CTR16BIT) flags |= CINSCAN_FF_CTR16_BIT;
+    if (Options & CTR32BIT) flags |= CINSCAN_FF_CTR32_BIT;
+    if (Options & CTR48BIT) flags |= CINSCAN_FF_CTR48_BIT;
+    if (Options & CTR64BIT) flags |= CINSCAN_FF_CTR64_BIT;
+    if (Options & CBW_NOCLEAR) flags |= CINSCAN_FF_NOCLEAR;
+    error = ulCInScan(daqDeviceHandle_, FirstCtr, LastCtr, samplesPerCounter, &rate, scanOptions, (CInScanFlag)flags, (unsigned long long *)MemHandle);
+    ctrScanInProgress_ = true;
+    return mapError(error, "ulCInScan");
 }
 
 int mcBoard::cbCConfigScan(int CounterNum, int Mode,int DebounceTime,
                            int DebounceMode, int EdgeDetection,
                            int TickSize, int MappedChannel)
 {
-    printf("Function cbCConfigScan not supported\n");
-    return NOERRORS;
+    CounterMeasurementType type = CMT_COUNT;
+    int                                                   mode = CMM_DEFAULT;
+    if (Mode & CLEAR_ON_READ)                             mode |= CMM_CLEAR_ON_READ;
+    if (Mode & COUNTDOWN)                                 mode |= CMM_COUNT_DOWN;
+    if (Mode & GATE_CONTROLS_DIR)                         mode |= CMM_GATE_CONTROLS_DIR;
+    if (Mode & GATE_CLEARS_CTR)                           mode |= CMM_GATE_CLEARS_CTR;
+    if (Mode & GATE_TRIG_SRC)                             mode |= CMM_GATE_TRIG_SRC;
+    if (Mode & OUTPUT_ON)                                 mode |= CMM_OUTPUT_ON;
+    if (Mode & OUTPUT_INITIAL_STATE_HIGH)                 mode |= CMM_OUTPUT_INITIAL_STATE_HIGH;
+    if (Mode & NO_RECYCLE)                                mode |= CMM_NO_RECYCLE;
+    if (Mode & RANGE_LIMIT_ON)                            mode |= CMM_RANGE_LIMIT_ON;
+    if (Mode & GATING_ON)                                 mode |= CMM_GATING_ON;
+    if (Mode & PERIOD & PERIOD_MODE_X1)                   mode |= CMM_PERIOD_X1;
+    if (Mode & PERIOD & PERIOD_MODE_X10)                  mode |= CMM_PERIOD_X10;
+    if (Mode & PERIOD & PERIOD_MODE_X100)                 mode |= CMM_PERIOD_X100;
+    if (Mode & PERIOD & PERIOD_MODE_X1000)                mode |= CMM_PERIOD_X1000;
+    if (Mode & PERIOD & PERIOD_MODE_GATING_ON)            mode |= CMM_PERIOD_GATING_ON;
+    if (Mode & PERIOD & PERIOD_MODE_INVERT_GATE)          mode |= CMM_PERIOD_INVERT_GATE;
+    if (Mode & PULSEWIDTH & PULSEWIDTH_MODE_GATING_ON)    mode |= CMM_PULSE_WIDTH_GATING_ON;
+    if (Mode & PULSEWIDTH & PULSEWIDTH_MODE_INVERT_GATE)  mode |= CMM_PULSE_WIDTH_INVERT_GATE;
+    if (Mode & TIMING & TIMING_MODE_INVERT_GATE)          mode |= CMM_TIMING_MODE_INVERT_GATE;
+    if (Mode & ENCODER & ENCODER_MODE_X1)                 mode |= CMM_ENCODER_X1;
+    if (Mode & ENCODER & ENCODER_MODE_X2)                 mode |= CMM_ENCODER_X2;
+    if (Mode & ENCODER & ENCODER_MODE_X4)                 mode |= CMM_ENCODER_X4;
+    if (Mode & ENCODER & ENCODER_MODE_LATCH_ON_Z)         mode |= CMM_ENCODER_LATCH_ON_Z;
+    if (Mode & ENCODER & ENCODER_MODE_CLEAR_ON_Z_ON)      mode |= CMM_ENCODER_CLEAR_ON_Z;
+    if (Mode & ENCODER & ENCODER_MODE_NO_RECYCLE_ON)      mode |= CMM_ENCODER_NO_RECYCLE;
+    if (Mode & ENCODER & ENCODER_MODE_RANGE_LIMIT_ON)     mode |= CMM_ENCODER_RANGE_LIMIT_ON;
+    //if (Mode & ENCODER_MODE_Z_ACTIVE_EDGE)              mode |= CMM_ENCODER_Z_ACTIVE_EDGE;
+    //if (Mode & LATCH_ON_INDEX)                          mode |= CMM_LATCH_ON_INDEX;
+    //if (Mode & PHB_CONTROLS_DIR)                        mode |= CMM_PHB_CONTROLS_DIR;
+    if (Mode & DECREMENT_ON)                              mode |= CMM_DECREMENT_ON;
+    CounterEdgeDetection edgeDetection;
+    edgeDetection = (EdgeDetection == RISING_EDGE) ? CED_RISING_EDGE : CED_FALLING_EDGE;
+    CounterTickSize tickSize;
+    switch (TickSize) {
+      case CTR_TICK20PT83ns:    tickSize = CTS_TICK_20PT83ns; break;
+      case CTR_TICK208PT3ns:    tickSize = CTS_TICK_208PT3ns; break;
+      case CTR_TICK2083PT3ns:   tickSize = CTS_TICK_2083PT3ns; break;
+      case CTR_TICK20833PT3ns:  tickSize = CTS_TICK_20833PT3ns; break;
+      case CTR_TICK20ns:        tickSize = CTS_TICK_20ns; break;
+      case CTR_TICK200ns:       tickSize = CTS_TICK_200ns; break;
+      case CTR_TICK2000ns:      tickSize = CTS_TICK_2000ns; break;
+      case CTR_TICK20000ns:     tickSize = CTS_TICK_20000ns; break;
+      default:
+        printf("mcBoard::cbCConfigScan unknown TickSize=%d\n", TickSize);
+        tickSize = CTS_TICK_20PT83ns;
+        break;
+    }
+    CounterDebounceMode debounceMode;
+    if (DebounceTime == CTR_DEBOUNCE_NONE)          debounceMode = CDM_NONE;
+    if (DebounceMode == CTR_TRIGGER_AFTER_STABLE)   debounceMode = CDM_TRIGGER_AFTER_STABLE;
+    if (DebounceMode == CTR_TRIGGER_BEFORE_STABLE)  debounceMode = CDM_TRIGGER_BEFORE_STABLE;
+    CounterDebounceTime debounceTime;
+    switch (DebounceTime) {
+      case CTR_DEBOUNCE_NONE:     debounceTime = CDT_DEBOUNCE_0ns; debounceMode = CDM_NONE; break;
+      case CTR_DEBOUNCE500ns:     debounceTime = CDT_DEBOUNCE_500ns;
+      case CTR_DEBOUNCE1500ns:    debounceTime = CDT_DEBOUNCE_1500ns;
+      case CTR_DEBOUNCE3500ns:    debounceTime = CDT_DEBOUNCE_3500ns;
+      case CTR_DEBOUNCE7500ns:    debounceTime = CDT_DEBOUNCE_7500ns;
+      case CTR_DEBOUNCE15500ns:   debounceTime = CDT_DEBOUNCE_15500ns;
+      case CTR_DEBOUNCE31500ns:   debounceTime = CDT_DEBOUNCE_31500ns;
+      case CTR_DEBOUNCE63500ns:   debounceTime = CDT_DEBOUNCE_63500ns;
+      case CTR_DEBOUNCE127500ns:  debounceTime = CDT_DEBOUNCE_127500ns;
+      case CTR_DEBOUNCE100us:     debounceTime = CDT_DEBOUNCE_100us;
+      case CTR_DEBOUNCE300us:     debounceTime = CDT_DEBOUNCE_300us;
+      case CTR_DEBOUNCE700us:     debounceTime = CDT_DEBOUNCE_700us;
+      case CTR_DEBOUNCE1500us:    debounceTime = CDT_DEBOUNCE_1500us;
+      case CTR_DEBOUNCE3100us:    debounceTime = CDT_DEBOUNCE_3100us;
+      case CTR_DEBOUNCE6300us:    debounceTime = CDT_DEBOUNCE_6300us;
+      case CTR_DEBOUNCE12700us:   debounceTime = CDT_DEBOUNCE_12700us;
+      case CTR_DEBOUNCE25500us:   debounceTime = CDT_DEBOUNCE_25500us;
+      default:
+        printf("mcBoard::cbCConfigScan unknown DebounceTime=%d\n", DebounceTime);
+        break;
+    }
+
+    UlError error = ulCConfigScan(daqDeviceHandle_, CounterNum, type,  (CounterMeasurementMode) mode,
+					                        edgeDetection, tickSize, debounceMode, debounceTime, CF_DEFAULT);
+	  return mapError(error, "ulCConfigScan");
 }
 
 // Digital I/O functions
@@ -561,6 +695,7 @@ int mcBoard::cbPulseOutStart(int TimerNum, double *Frequency,
     TmrIdleState idle = (IdleState == IDLE_LOW) ? TMRIS_LOW : TMRIS_HIGH;
     // For now we don't handle any options
     PulseOutOption pulseOptions = (PulseOutOption)Options;
+ 
     UlError error = ulTmrPulseOutStart(daqDeviceHandle_, TimerNum, Frequency, DutyCycle, PulseCount, InitialDelay,
                                        idle, pulseOptions);
     return mapError(error, "ulTmrPulseOutStart()");
