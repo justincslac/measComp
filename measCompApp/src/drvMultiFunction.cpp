@@ -937,6 +937,9 @@ MultiFunction::MultiFunction(const char *portName, const char *uniqueID, int max
   setIntegerParam(pulseGenRun_, 0);
   setIntegerParam(waveDigRun_, 0);
   setIntegerParam(waveGenRun_, 0);
+  for (i=0; i<numTempChans_; i++) {
+    setIntegerParam(i, thermocoupleType_, TC_TYPE_J);
+  }
 
   /* Start the thread to poll counters and digital inputs and do callbacks to
    * device support */
