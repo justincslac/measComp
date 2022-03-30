@@ -4,6 +4,8 @@
 #include <uldaq.h>
 #include "cbw_linux_noconflict.h"
 
+#define MAX_TEMP_CHANS 32
+
 class mcBoard {
 public:
     mcBoard(DaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDeviceHandle);
@@ -80,8 +82,10 @@ protected:
     AInFlag aiFlags_;
     int aiScanTrigCount_;
     AiQueueElement *aiScanQueue_;
+    TcType tcType_[MAX_TEMP_CHANS];
     Range aoRange_;
     AOutFlag aoFlags_;
+    int aoTrigCount_;
     bool aiScanInProgress_;
     bool aoScanInProgress_;
     bool daqiScanInProgress_;
