@@ -201,6 +201,26 @@ int mcBoard::mapTriggerType(int cbwTriggerType, TriggerType *triggerType)
     return NOERRORS;
 }
 
+int mcBoard::mapDaqInTriggerType(int cbwTriggerType, TriggerType *triggerType)
+{
+    // Converts cbw trigger type to uldaq trigger type;
+    switch (cbwTriggerType) {
+      case RISING_EDGE:             *triggerType = TRIG_RISING; break;
+      case FALLING_EDGE:            *triggerType = TRIG_FALLING; break;
+      case ABOVE_LEVEL:             *triggerType = TRIG_ABOVE; break;
+      case BELOW_LEVEL:             *triggerType = TRIG_BELOW; break;
+      case EQ_LEVEL:                *triggerType = TRIG_PATTERN_EQ; break;
+      case NE_LEVEL:                *triggerType = TRIG_PATTERN_NE; break;
+      case HIGH_LEVEL:              *triggerType = TRIG_HIGH; break;
+      case LOW_LEVEL:               *triggerType = TRIG_LOW; break;
+      default:
+          printf("mcBoard::mapDaqInTriggerType unsupported cbwTriggerType=%d\n", cbwTriggerType);
+          *triggerType = TRIG_NONE;
+          return BADTRIGTYPE;
+    }
+    return NOERRORS;
+}
+
 int mcBoard::mapAInChanType(int cbwChanType, AiChanType *chanType)
 {
     // Converts cbw chan type to uldaq AiChanType;
@@ -221,7 +241,7 @@ int mcBoard::mapDaqInChanType(int cbwChanType, DaqInChanType *chanType)
     switch (cbwChanType) {
       case ANALOG_DIFF: *chanType = DAQI_ANALOG_DIFF; break;
       case ANALOG_SE:   *chanType = DAQI_ANALOG_SE; break;
-      case DIGITAL:     *chanType = DAQI_DIGITAL; break;
+      case DIGITAL8:    *chanType = DAQI_DIGITAL; break;
       case CTRBANK0:    *chanType = DAQI_CTR16; break;
       case CTRBANK1:    *chanType = DAQI_CTR32; break;
       case CTRBANK2:    *chanType = DAQI_CTR48; break;
@@ -431,7 +451,7 @@ int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex, int Fu
         *CurCount = 0;
         *CurIndex = 0;
     }
-//printf("cbGetIOStatus scanInProgress=%d, Status=%d, CurCount=%ld, CurIndex=%ld\n", scanInProgress, *Status, *CurCount, *CurIndex);
+    //printf("cbGetIOStatus scanInProgress=%d, Status=%d, CurCount=%ld, CurIndex=%ld\n", scanInProgress, *Status, *CurCount, *CurIndex);
     return mapError(error, "cbGetIOStatus()");
 }
 
@@ -576,6 +596,7 @@ int mcBoard::cbCLoad32(int RegNum, unsigned int LoadValue)
         registerType = CRT_OUTPUT_VAL1;
     }
     UlError error = ulCLoad(daqDeviceHandle_, counterNum, registerType, LoadValue);
+    //printf("ulCLoad, counterNum=%d, regusterType=%d, loadValue=%d\n", counterNum, registerType, LoadValue);
     return mapError(error, "ulCLoad()");
 }
 
@@ -597,8 +618,8 @@ int mcBoard::cbCInScan(int FirstCtr,int LastCtr, int Count,
     if (Options & CTR48BIT) flags |= CINSCAN_FF_CTR48_BIT;
     if (Options & CTR64BIT) flags |= CINSCAN_FF_CTR64_BIT;
     if (Options & CBW_NOCLEAR) flags |= CINSCAN_FF_NOCLEAR;
-printf("ulCInScan FirstCtr=%d LastCtr=%d samplesPerCounter=%d, rate=%f, scanOptions=0x%x, flags=0x%x, MemHandle=%p\n",
-FirstCtr, LastCtr, samplesPerCounter, rate, scanOptions, flags, MemHandle);
+    // printf("ulCInScan FirstCtr=%d LastCtr=%d samplesPerCounter=%d, rate=%f, scanOptions=0x%x, flags=0x%x, MemHandle=%p\n",
+    //        FirstCtr, LastCtr, samplesPerCounter, rate, scanOptions, flags, MemHandle);
 
     error = ulCInScan(daqDeviceHandle_, FirstCtr, LastCtr, samplesPerCounter, &rate, scanOptions, (CInScanFlag)flags, (unsigned long long *)MemHandle);
     ctrScanInProgress_ = true;
@@ -689,8 +710,8 @@ int mcBoard::cbCConfigScan(int CounterNum, int Mode,int DebounceTime,
     CConfigScanFlag flags = CF_DEFAULT;
     UlError error = ulCConfigScan(daqDeviceHandle_, CounterNum, type,  (CounterMeasurementMode) mode,
 					                        edgeDetection, tickSize, debounceMode, debounceTime, flags);
-printf("ulCConfigScan CounterNum=%d, type=%d, mode=0x%x, edgeDetection=%d, tickSize=%d, debounceMode=%d, debounceTime=%d, flags=0x%x\n",
-CounterNum, type, mode, edgeDetection, tickSize, debounceMode, debounceTime, flags);
+    //printf("ulCConfigScan CounterNum=%d, type=%d, mode=0x%x, edgeDetection=%d, tickSize=%d, debounceMode=%d, debounceTime=%d, flags=0x%x\n",
+    //        CounterNum, type, mode, edgeDetection, tickSize, debounceMode, debounceTime, flags);
 	  return mapError(error, "ulCConfigScan");
 }
 
@@ -810,6 +831,7 @@ int mcBoard::cbDaqInScan(short *ChanArray, short *ChanTypeArray, short *GainArra
                          long *PretrigCount, long *TotalCount, void * MemHandle, int Options)
 {
     double rate = *Rate;
+    if (Options & HIGHRESRATE) rate /= 1000;
     int i, outChan=0, chan, prevChan=ChanArray[0];
     int samplesPerChan = *TotalCount/ChanCount;
     ScanOption scanOptions;
@@ -819,18 +841,20 @@ int mcBoard::cbDaqInScan(short *ChanArray, short *ChanTypeArray, short *GainArra
     daqiChanDescriptors_ = (DaqInChanDescriptor *) calloc(ChanCount, sizeof(DaqInChanDescriptor));
     for (i=0; i<ChanCount; i++) {
         chan = ChanArray[i];
-        daqiChanDescriptors_[outChan].channel = chan;
-        daqiChanDescriptors_[outChan].channel = ChanArray[i];
-        mapDaqInChanType(ChanTypeArray[i], &(daqiChanDescriptors_[outChan].type));
-        mapRange(GainArray[i], &(daqiChanDescriptors_[outChan].range));
         if (chan != prevChan) {
             prevChan = chan;
             outChan++;
         }
+        if (ChanTypeArray[i] == PADZERO) continue;
+        daqiChanDescriptors_[outChan].channel = chan;
+        mapDaqInChanType(ChanTypeArray[i], &(daqiChanDescriptors_[outChan].type));
+        mapRange(GainArray[i], &(daqiChanDescriptors_[outChan].range));
     }
-    int numChans = outChan+1;
+    int numChans = outChan;
     UlError error = ulDaqInScan(daqDeviceHandle_, daqiChanDescriptors_, numChans, samplesPerChan, &rate, scanOptions, flags, (double*)MemHandle);
-printf("mcBoard::cbDaqInScan ulDaqInScan numChans=%d, samplesPerChan=%d, rate=%f, scanOptions=0x%x\n", numChans, samplesPerChan, rate, scanOptions);
+    //printf("mcBoard::cbDaqInScan ulDaqInScan numChans=%d, samplesPerChan=%d, rate=%f, scanOptions=0x%x\n", numChans, samplesPerChan, rate, scanOptions);
+    *Rate = rate;
+    if (Options & HIGHRESRATE) *Rate *= 1000;
     daqiScanInProgress_ = true;
     return mapError(error, "ulDaqInScan");
 }
@@ -838,8 +862,14 @@ printf("mcBoard::cbDaqInScan ulDaqInScan numChans=%d, samplesPerChan=%d, rate=%f
 int mcBoard::cbDaqSetTrigger(int TrigSource, int TrigSense, int TrigChan, int ChanType,
                              int Gain, float Level, float Variance, int TrigEvent)
 {
-//    DaqInChanDescriptor trigChanDescriptor;
-//    UlError error = ulDaqInSetTrigger(daqDeviceHandle_, TriggerType type, trigChanDescriptor, Level, Variance, unsigned int retriggerSampleCount);
-    printf("cbDaqSetTrigger is not supported\n");
-    return NOERRORS;
+    DaqInChanDescriptor trigChanDescriptor;
+    TriggerType triggerType;
+    mapDaqInTriggerType(TrigSense, &triggerType);
+    if (TrigSource != TRIG_EXTTTL) {
+        printf("mcBoard::cbDaqSetTrigger unsupported TrigSource\n");
+        return BADTRIGTYPE;
+    }
+    UlError error = ulDaqInSetTrigger(daqDeviceHandle_, triggerType, trigChanDescriptor, Level, Variance, 0);
+    //printf("ulDaqInSetTrigger TrigSense=%d triggerType=%d, Level=%f, Variance=%f\n", TrigSense, triggerType, Level, Variance);
+    return mapError(error, "ulDaqInSetTrigger");
 }
