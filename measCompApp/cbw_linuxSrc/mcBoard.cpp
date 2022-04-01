@@ -621,6 +621,7 @@ int mcBoard::cbCConfigScan(int CounterNum, int Mode,int DebounceTime,
     if (Mode & NO_RECYCLE)                                mode |= CMM_NO_RECYCLE;
     if (Mode & RANGE_LIMIT_ON)                            mode |= CMM_RANGE_LIMIT_ON;
     if (Mode & GATING_ON)                                 mode |= CMM_GATING_ON;
+    if (Mode & INVERT_GATE)                               mode |= CMM_INVERT_GATE;
     if (Mode & PERIOD & PERIOD_MODE_X1)                   mode |= CMM_PERIOD_X1;
     if (Mode & PERIOD & PERIOD_MODE_X10)                  mode |= CMM_PERIOD_X10;
     if (Mode & PERIOD & PERIOD_MODE_X100)                 mode |= CMM_PERIOD_X100;
@@ -685,9 +686,11 @@ int mcBoard::cbCConfigScan(int CounterNum, int Mode,int DebounceTime,
         printf("mcBoard::cbCConfigScan unknown DebounceTime=%d\n", DebounceTime);
         break;
     }
-
+    CConfigScanFlag flags = CF_DEFAULT;
     UlError error = ulCConfigScan(daqDeviceHandle_, CounterNum, type,  (CounterMeasurementMode) mode,
-					                        edgeDetection, tickSize, debounceMode, debounceTime, CF_DEFAULT);
+					                        edgeDetection, tickSize, debounceMode, debounceTime, flags);
+printf("ulCConfigScan CounterNum=%d, type=%d, mode=0x%x, edgeDetection=%d, tickSize=%d, debounceMode=%d, debounceTime=%d, flags=0x%x\n",
+CounterNum, type, mode, edgeDetection, tickSize, debounceMode, debounceTime, flags);
 	  return mapError(error, "ulCConfigScan");
 }
 
