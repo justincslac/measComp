@@ -88,7 +88,6 @@ protected:
     Range aoRange_;
     AOutFlag aoFlags_;
     int aoTrigCount_;
-    DaqInChanDescriptor *daqiChanDescriptors_;
     bool aiScanInProgress_;
     bool aoScanInProgress_;
     bool daqiScanInProgress_;

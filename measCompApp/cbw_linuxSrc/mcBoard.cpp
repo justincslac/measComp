@@ -11,7 +11,6 @@ mcBoard::mcBoard(DaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDev
     aiFlags_(AIN_FF_NOSCALEDATA),
     aiScanQueue_(0),
     aoFlags_(AOUT_FF_NOSCALEDATA),
-    daqiChanDescriptors_(0),
     aiScanInProgress_(false),
     aoScanInProgress_(false),
     daqiScanInProgress_(false),
@@ -835,10 +834,9 @@ int mcBoard::cbDaqInScan(short *ChanArray, short *ChanTypeArray, short *GainArra
     int i, outChan=0, chan, prevChan=ChanArray[0];
     int samplesPerChan = *TotalCount/ChanCount;
     ScanOption scanOptions;
+    DaqInChanDescriptor *pDICD = new DaqInChanDescriptor[ChanCount];
     mapScanOptions(Options, &scanOptions);
     DaqInScanFlag flags = DAQINSCAN_FF_DEFAULT;
-    if (daqiChanDescriptors_) free(daqiChanDescriptors_);
-    daqiChanDescriptors_ = (DaqInChanDescriptor *) calloc(ChanCount, sizeof(DaqInChanDescriptor));
     for (i=0; i<ChanCount; i++) {
         chan = ChanArray[i];
         if (chan != prevChan) {
@@ -846,13 +844,14 @@ int mcBoard::cbDaqInScan(short *ChanArray, short *ChanTypeArray, short *GainArra
             outChan++;
         }
         if (ChanTypeArray[i] == PADZERO) continue;
-        daqiChanDescriptors_[outChan].channel = chan;
-        mapDaqInChanType(ChanTypeArray[i], &(daqiChanDescriptors_[outChan].type));
-        mapRange(GainArray[i], &(daqiChanDescriptors_[outChan].range));
+        pDICD[outChan].channel = chan;
+        mapDaqInChanType(ChanTypeArray[i], &(pDICD[outChan].type));
+        mapRange(GainArray[i], &(pDICD[outChan].range));
     }
     int numChans = outChan;
-    UlError error = ulDaqInScan(daqDeviceHandle_, daqiChanDescriptors_, numChans, samplesPerChan, &rate, scanOptions, flags, (double*)MemHandle);
+    UlError error = ulDaqInScan(daqDeviceHandle_, pDICD, numChans, samplesPerChan, &rate, scanOptions, flags, (double*)MemHandle);
     //printf("mcBoard::cbDaqInScan ulDaqInScan numChans=%d, samplesPerChan=%d, rate=%f, scanOptions=0x%x\n", numChans, samplesPerChan, rate, scanOptions);
+    delete[] pDICD;
     *Rate = rate;
     if (Options & HIGHRESRATE) *Rate *= 1000;
     daqiScanInProgress_ = true;
