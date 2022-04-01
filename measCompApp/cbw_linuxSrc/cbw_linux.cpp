@@ -108,6 +108,11 @@ HGLOBAL cbWinBufAlloc32(long NumPoints)
     return calloc(NumPoints, sizeof(int));
 }
 
+HGLOBAL cbWinBufAlloc64(long NumPoints)
+{
+    return calloc(NumPoints, sizeof(long long));
+}
+
 int cbStopIOBackground(int BoardNum, int FunctionType)
 {
     if (BoardNum >= (int)boardList.size()) return BADBOARD;
