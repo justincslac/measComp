@@ -183,6 +183,7 @@ private:
   epicsFloat32 *MCSTimeBuffer_;
   epicsFloat64 *MCSAbsTimeBuffer_;
   HGLOBAL inputMemHandle_;
+  epicsInt64 *pCounts64_;
   epicsInt32 *pCounts32_;
   epicsInt16 *pCounts16_;
   int counterBits_;
@@ -320,7 +321,11 @@ USBCTR::USBCTR(const char *portName, const char *uniqueID, int maxTimePoints, do
   }
   MCSTimeBuffer_    = (epicsFloat32 *) calloc(maxTimePoints_,  sizeof(epicsFloat32));
   MCSAbsTimeBuffer_ = (epicsFloat64 *) calloc(maxTimePoints_,  sizeof(epicsFloat64));
-  inputMemHandle_  = cbWinBufAlloc32((maxTimePoints+1)  * MAX_MCS_COUNTERS); // +1 allows for skipping first point
+  for (i=0; i<MAX_DAQ_LEN; i++) {
+    gainArray_[i] = BIP10VOLTS;
+  }
+  inputMemHandle_  = cbWinBufAlloc64((maxTimePoints+1)  * MAX_MCS_COUNTERS); // +1 allows for skipping first point
+  pCounts64_ = (epicsInt64 *)inputMemHandle_;
   pCounts32_ = (epicsInt32 *)inputMemHandle_;
   pCounts16_ = (epicsInt16 *)inputMemHandle_;
 
@@ -706,7 +711,7 @@ int USBCTR::startScaler()
   LONG rate = 100;
   int firstCounter = 0;
   int lastCounter = numCounters_ - 1;
-  int options = BACKGROUND | CONTINUOUS | CTR32BIT | SINGLEIO;
+  int options = BACKGROUND | CONTINUOUS | CTR64BIT | SINGLEIO;
   static const char *functionName = "startScaler";
 
   for (i=0; i<numCounters_; i++) {
@@ -755,7 +760,7 @@ int USBCTR::readScaler()
   lastIndex = (numValues/numCounters_ - 1) * numCounters_;
   for (i=0; i<=lastIndex; i+= numCounters_) {
     for (j=0; j<numCounters_; j++) {
-      scalerCounts_[j] = pCounts32_[i+j];
+      scalerCounts_[j] = pCounts64_[i+j];
       if ((scalerPresetCounts_[j] > 0) && (scalerCounts_[j] >= scalerPresetCounts_[j])) {
         scalerDone = true;
       }
