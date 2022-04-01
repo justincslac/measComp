@@ -12,6 +12,7 @@ public:
 
     int mapRange(int Gain, Range *range);
     int mapTriggerType(int cbwTriggerType, TriggerType *triggerType);
+    int mapDaqInTriggerType(int cbwTriggerType, TriggerType *triggerType);
     int mapAInChanType(int cbwChanType, AiChanType *chanType);
     int mapDaqInChanType(int cbwChanType, DaqInChanType *chanType);
     int mapError(UlError error, const char *message);
