@@ -12,7 +12,8 @@ public:
 
     int mapRange(int Gain, Range *range);
     int mapTriggerType(int cbwTriggerType, TriggerType *triggerType);
-    int mapAiChanType(int cbwChanType, AiChanType *chanType);
+    int mapAInChanType(int cbwChanType, AiChanType *chanType);
+    int mapDaqInChanType(int cbwChanType, DaqInChanType *chanType);
     int mapError(UlError error, const char *message);
     int mapScanOptions(int cbwOptions, ScanOption *options);
 
@@ -86,6 +87,7 @@ protected:
     Range aoRange_;
     AOutFlag aoFlags_;
     int aoTrigCount_;
+    DaqInChanDescriptor *daqiChanDescriptors_;
     bool aiScanInProgress_;
     bool aoScanInProgress_;
     bool daqiScanInProgress_;
