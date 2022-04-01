@@ -183,6 +183,7 @@ private:
   epicsFloat32 *MCSTimeBuffer_;
   epicsFloat64 *MCSAbsTimeBuffer_;
   HGLOBAL inputMemHandle_;
+  epicsFloat64 *pFloat64_;
   epicsInt64 *pCounts64_;
   epicsInt32 *pCounts32_;
   epicsInt16 *pCounts16_;
@@ -325,6 +326,7 @@ USBCTR::USBCTR(const char *portName, const char *uniqueID, int maxTimePoints, do
     gainArray_[i] = BIP10VOLTS;
   }
   inputMemHandle_  = cbWinBufAlloc64((maxTimePoints+1)  * MAX_MCS_COUNTERS); // +1 allows for skipping first point
+  pFloat64_  = (epicsFloat64 *)inputMemHandle_;
   pCounts64_ = (epicsInt64 *)inputMemHandle_;
   pCounts32_ = (epicsInt32 *)inputMemHandle_;
   pCounts16_ = (epicsInt16 *)inputMemHandle_;
@@ -569,6 +571,8 @@ int USBCTR::readMCS()
   double presetReal, elapsedTime;
   static const char *functionName = "readMCS";
 
+  // We need to treat Windows and Linux differently here because with UL for Linux the buffer is always float64, while on
+  // Windows it is either int32 or int16.
   getIntegerParam(MCSCurrentPoint_, &currentPoint);
   getIntegerParam(mcaNumChannels_,  &numTimePoints);
   getIntegerParam(MCSPoint0Action_, &point0Action);
@@ -580,7 +584,9 @@ int USBCTR::readMCS()
     MCSRunning_ = false;
   }
   if (ctrIndex >= 0) {
+#ifdef WIN32
     if (counterBits_ == 32) ctrIndex /= 2;
+#endif
     lastPoint = ctrIndex / numMCSCounters_ + 1;
 
     int inPtr = currentPoint;
@@ -592,6 +598,7 @@ int USBCTR::readMCS()
     for(; inPtr < lastPoint; inPtr++) {
       for (i=0, j=0; i<MAX_MCS_COUNTERS; i++) {
         if (!mcsCounterEnable_[i]) continue;
+#ifdef WIN32
         if (counterBits_ == 32) {
           MCSBuffer_[i][currentPoint] = pCounts32_[inPtr*numMCSCounters_ + j];
           // There seems to be a bug in PADZERO and it is actually giving counter0 value not 0
@@ -599,6 +606,9 @@ int USBCTR::readMCS()
         } else {
           MCSBuffer_[i][currentPoint] = pCounts16_[inPtr*numMCSCounters_ + j];
         }
+#else
+          MCSBuffer_[i][currentPoint] = (int) pFloat64_[inPtr*numMCSCounters_ + j];
+#endif
         j++;
       }
       MCSAbsTimeBuffer_[currentPoint] = now.secPastEpoch + now.nsec/1.e9;
