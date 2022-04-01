@@ -11,6 +11,7 @@ mcBoard::mcBoard(DaqDeviceDescriptor daqDeviceDescriptor, DaqDeviceHandle daqDev
     aiFlags_(AIN_FF_NOSCALEDATA),
     aiScanQueue_(0),
     aoFlags_(AOUT_FF_NOSCALEDATA),
+    daqiChanDescriptors_(0),
     aiScanInProgress_(false),
     aoScanInProgress_(false),
     daqiScanInProgress_(false),
@@ -200,15 +201,33 @@ int mcBoard::mapTriggerType(int cbwTriggerType, TriggerType *triggerType)
     return NOERRORS;
 }
 
-int mcBoard::mapAiChanType(int cbwChanType, AiChanType *chanType)
+int mcBoard::mapAInChanType(int cbwChanType, AiChanType *chanType)
 {
     // Converts cbw chan type to uldaq AiChanType;
     switch (cbwChanType) {
       case AI_CHAN_TYPE_VOLTAGE:  *chanType = AI_VOLTAGE; break;
       case AI_CHAN_TYPE_TC:       *chanType = AI_TC; break;
       default:
-          printf("mcBoard::mapAiChanType unsupported cbwChanType=%d\n", cbwChanType);
+          printf("mcBoard::mapAInChanType unsupported cbwChanType=%d\n", cbwChanType);
           *chanType = AI_VOLTAGE;
+          return BADCHANTYPE;
+    }
+    return NOERRORS;
+}
+
+int mcBoard::mapDaqInChanType(int cbwChanType, DaqInChanType *chanType)
+{
+    // Converts cbw chan type to uldaq DaqInChanType;
+    switch (cbwChanType) {
+      case ANALOG_DIFF: *chanType = DAQI_ANALOG_DIFF; break;
+      case ANALOG_SE:   *chanType = DAQI_ANALOG_SE; break;
+      case DIGITAL:     *chanType = DAQI_DIGITAL; break;
+      case CTRBANK0:    *chanType = DAQI_CTR16; break;
+      case CTRBANK1:    *chanType = DAQI_CTR32; break;
+      case CTRBANK2:    *chanType = DAQI_CTR48; break;
+      default:
+          printf("mcBoard::mapDaqInChanType unsupported cbwChanType=%d\n", cbwChanType);
+          *chanType = DAQI_ANALOG_DIFF;
           return BADCHANTYPE;
     }
     return NOERRORS;
@@ -296,11 +315,18 @@ int mcBoard::cbSetConfig(int InfoType, int DevNum, int ConfigItem, int ConfigVal
             break;
           case BIADCHANTYPE:
             AiChanType chanType;
-            mapAiChanType(ConfigVal, &chanType);
+            mapAInChanType(ConfigVal, &chanType);
             error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TYPE, DevNum, chanType);
-            // When changing to AI_TC mode may need to set the thermocouple type because it may only be cached
             if (chanType == AI_TC) {
+                // When changing to AI_TC mode may need to set the thermocouple type because it may only be cached
                 error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_TC_TYPE, DevNum, tcType_[DevNum]);
+                mapError(error, "ulAISetConfig AI_CFG_CHAN_TC_TYPE");
+                // Need to set thermocouple open detection
+                error = ulAISetConfig(daqDeviceHandle_, AI_CFG_CHAN_OTD_MODE, DevNum, OTD_ENABLED);
+                mapError(error, "ulAISetConfig AI_CFG_CHAN_OTD_MODE");
+                // Need to set AI_CFG_AUTO_ZERO_MODE?
+                error = ulAISetConfig(daqDeviceHandle_, AI_CFG_AUTO_ZERO_MODE, DevNum, AZM_EVERY_SAMPLE);
+                mapError(error, "ulAISetConfig AI_CFG_AUTO_ZERO_MODE");
             }
            
             break;
@@ -405,6 +431,7 @@ int mcBoard::cbGetIOStatus(short *Status, long *CurCount, long *CurIndex, int Fu
         *CurCount = 0;
         *CurIndex = 0;
     }
+//printf("cbGetIOStatus scanInProgress=%d, Status=%d, CurCount=%ld, CurIndex=%ld\n", scanInProgress, *Status, *CurCount, *CurIndex);
     return mapError(error, "cbGetIOStatus()");
 }
 
@@ -555,7 +582,7 @@ int mcBoard::cbCLoad32(int RegNum, unsigned int LoadValue)
 int mcBoard::cbCInScan(int FirstCtr,int LastCtr, int Count,
                        int *Rate, void * MemHandle, unsigned int Options)
 {
-    int samplesPerCounter = 1;
+    int samplesPerCounter = Count / (LastCtr - FirstCtr + 1);
     UlError error;
     double rate = *Rate;
     ScanOption scanOptions;
@@ -570,6 +597,9 @@ int mcBoard::cbCInScan(int FirstCtr,int LastCtr, int Count,
     if (Options & CTR48BIT) flags |= CINSCAN_FF_CTR48_BIT;
     if (Options & CTR64BIT) flags |= CINSCAN_FF_CTR64_BIT;
     if (Options & CBW_NOCLEAR) flags |= CINSCAN_FF_NOCLEAR;
+printf("ulCInScan FirstCtr=%d LastCtr=%d samplesPerCounter=%d, rate=%f, scanOptions=0x%x, flags=0x%x, MemHandle=%p\n",
+FirstCtr, LastCtr, samplesPerCounter, rate, scanOptions, flags, MemHandle);
+
     error = ulCInScan(daqDeviceHandle_, FirstCtr, LastCtr, samplesPerCounter, &rate, scanOptions, (CInScanFlag)flags, (unsigned long long *)MemHandle);
     ctrScanInProgress_ = true;
     return mapError(error, "ulCInScan");
@@ -776,13 +806,37 @@ int mcBoard::cbSetTrigger(int TrigType, unsigned short LowThreshold, unsigned sh
 int mcBoard::cbDaqInScan(short *ChanArray, short *ChanTypeArray, short *GainArray, int ChanCount, long *Rate,
                          long *PretrigCount, long *TotalCount, void * MemHandle, int Options)
 {
-    printf("cbDaqInScan is not supported\n");
-    return NOERRORS;
+    double rate = *Rate;
+    int i, outChan=0, chan, prevChan=ChanArray[0];
+    int samplesPerChan = *TotalCount/ChanCount;
+    ScanOption scanOptions;
+    mapScanOptions(Options, &scanOptions);
+    DaqInScanFlag flags = DAQINSCAN_FF_DEFAULT;
+    if (daqiChanDescriptors_) free(daqiChanDescriptors_);
+    daqiChanDescriptors_ = (DaqInChanDescriptor *) calloc(ChanCount, sizeof(DaqInChanDescriptor));
+    for (i=0; i<ChanCount; i++) {
+        chan = ChanArray[i];
+        daqiChanDescriptors_[outChan].channel = chan;
+        daqiChanDescriptors_[outChan].channel = ChanArray[i];
+        mapDaqInChanType(ChanTypeArray[i], &(daqiChanDescriptors_[outChan].type));
+        mapRange(GainArray[i], &(daqiChanDescriptors_[outChan].range));
+        if (chan != prevChan) {
+            prevChan = chan;
+            outChan++;
+        }
+    }
+    int numChans = outChan+1;
+    UlError error = ulDaqInScan(daqDeviceHandle_, daqiChanDescriptors_, numChans, samplesPerChan, &rate, scanOptions, flags, (double*)MemHandle);
+printf("mcBoard::cbDaqInScan ulDaqInScan numChans=%d, samplesPerChan=%d, rate=%f, scanOptions=0x%x\n", numChans, samplesPerChan, rate, scanOptions);
+    daqiScanInProgress_ = true;
+    return mapError(error, "ulDaqInScan");
 }
 
 int mcBoard::cbDaqSetTrigger(int TrigSource, int TrigSense, int TrigChan, int ChanType,
                              int Gain, float Level, float Variance, int TrigEvent)
 {
+//    DaqInChanDescriptor trigChanDescriptor;
+//    UlError error = ulDaqInSetTrigger(daqDeviceHandle_, TriggerType type, trigChanDescriptor, Level, Variance, unsigned int retriggerSampleCount);
     printf("cbDaqSetTrigger is not supported\n");
     return NOERRORS;
 }
